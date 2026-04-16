@@ -1,0 +1,224 @@
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800;900&family=Space+Grotesk:wght@500;600;700&display=swap');
+
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer base {
+  :root {
+    --background: 220 14% 94%;
+    --foreground: 225 50% 17%;
+
+    --card: 0 0% 100%;
+    --card-foreground: 225 50% 17%;
+
+    --popover: 0 0% 100%;
+    --popover-foreground: 225 50% 17%;
+
+    --primary: 225 55% 23%;
+    --primary-foreground: 0 0% 100%;
+
+    --secondary: 220 15% 90%;
+    --secondary-foreground: 225 50% 17%;
+
+    --muted: 220 14% 91%;
+    --muted-foreground: 220 10% 45%;
+
+    --accent: 358 80% 51%;
+    --accent-foreground: 0 0% 100%;
+
+    --destructive: 0 84% 60%;
+    --destructive-foreground: 0 0% 100%;
+
+    --success: 152 60% 40%;
+    --success-foreground: 0 0% 100%;
+
+    --warning: 38 92% 50%;
+    --warning-foreground: 0 0% 100%;
+
+    --border: 220 15% 88%;
+    --input: 220 15% 88%;
+    --ring: 225 55% 30%;
+
+    --radius: 0.75rem;
+
+    --sidebar-background: 225 50% 12%;
+    --sidebar-foreground: 220 10% 92%;
+    --sidebar-primary: 225 55% 40%;
+    --sidebar-primary-foreground: 0 0% 100%;
+    --sidebar-accent: 225 40% 18%;
+    --sidebar-accent-foreground: 220 10% 92%;
+    --sidebar-border: 225 40% 18%;
+    --sidebar-ring: 225 55% 40%;
+
+    --font-display: 'Space Grotesk', sans-serif;
+    --font-body: 'Inter', sans-serif;
+
+    --shadow-card: 0 1px 3px 0 rgb(0 0 0 / 0.04), 0 1px 2px -1px rgb(0 0 0 / 0.04);
+    --shadow-elevated: 0 6px 20px -4px rgb(0 0 0 / 0.10), 0 2px 6px -2px rgb(0 0 0 / 0.05);
+    --shadow-modal: 0 20px 60px -12px rgb(0 0 0 / 0.18);
+
+    --vehicle-card-bg: linear-gradient(165deg, hsl(220 30% 90%) 0%, hsl(220 35% 84%) 100%);
+    --vehicle-card-glow: radial-gradient(ellipse at 50% 100%, hsl(225 55% 23% / 0.15) 0%, transparent 65%);
+  }
+
+  .dark {
+    --background: 225 35% 7%;
+    --foreground: 220 10% 95%;
+    --card: 225 35% 10%;
+    --card-foreground: 220 10% 95%;
+    --popover: 225 35% 10%;
+    --popover-foreground: 220 10% 95%;
+    --primary: 225 55% 45%;
+    --primary-foreground: 0 0% 100%;
+    --secondary: 225 25% 18%;
+    --secondary-foreground: 220 10% 90%;
+    --muted: 225 25% 15%;
+    --muted-foreground: 220 10% 55%;
+    --accent: 358 75% 55%;
+    --accent-foreground: 0 0% 100%;
+    --destructive: 0 62% 30%;
+    --destructive-foreground: 0 0% 100%;
+    --border: 225 25% 18%;
+    --input: 225 25% 18%;
+    --ring: 225 55% 50%;
+
+    --vehicle-card-bg: linear-gradient(165deg, #0d1525 0%, #1b2a4f 100%);
+    --vehicle-card-glow: radial-gradient(ellipse at 50% 100%, hsl(225 55% 45% / 0.25) 0%, transparent 65%);
+  }
+}
+
+@layer base {
+  * {
+    @apply border-border;
+  }
+
+  body {
+    @apply bg-background text-foreground;
+    font-family: var(--font-body);
+  }
+
+  h1, h2, h3, h4, h5, h6 {
+    font-family: var(--font-display);
+  }
+}
+
+@layer components {
+  .card-elevated {
+    @apply bg-card rounded-xl border border-border;
+    box-shadow: var(--shadow-card);
+    transition: box-shadow 0.2s ease-in-out, transform 0.2s ease-in-out;
+  }
+
+  .card-elevated:hover {
+    box-shadow: var(--shadow-elevated);
+    transform: translateY(-1px);
+  }
+
+  .status-badge {
+    @apply inline-flex items-center px-2.5 py-1 rounded-full text-xs font-semibold tracking-wide uppercase;
+    transition: all 0.2s ease-in-out;
+  }
+
+  .status-booked {
+    @apply bg-primary/10 text-primary;
+  }
+
+  .status-in-progress {
+    background: hsl(var(--warning) / 0.12);
+    color: hsl(var(--warning));
+  }
+
+  .status-test-drive {
+    background: hsl(var(--accent) / 0.12);
+    color: hsl(var(--accent));
+  }
+
+  .status-completed {
+    background: hsl(var(--success) / 0.12);
+    color: hsl(var(--success));
+  }
+
+  .damage-pin {
+    @apply absolute w-5 h-5 rounded-full border-2 border-card cursor-pointer transform -translate-x-1/2 -translate-y-1/2 z-10;
+    box-shadow: 0 2px 6px rgb(0 0 0 / 0.3);
+    transition: all 0.2s ease-in-out;
+  }
+
+  .damage-pin:hover {
+    transform: translate(-50%, -50%) scale(1.2);
+    box-shadow: 0 4px 12px rgb(0 0 0 / 0.4);
+  }
+
+  .damage-pin-minor {
+    background: hsl(var(--warning));
+  }
+
+  .damage-pin-major {
+    background: hsl(var(--accent));
+  }
+}
+
+/* ─── Animation Keyframes ─── */
+@keyframes fadeInUp {
+  from { opacity: 0; transform: translateY(16px); }
+  to   { opacity: 1; transform: translateY(0); }
+}
+@keyframes fadeIn {
+  from { opacity: 0; }
+  to   { opacity: 1; }
+}
+@keyframes slideInLeft {
+  from { opacity: 0; transform: translateX(-20px); }
+  to   { opacity: 1; transform: translateX(0); }
+}
+@keyframes slideInRight {
+  from { opacity: 0; transform: translateX(20px); }
+  to   { opacity: 1; transform: translateX(0); }
+}
+@keyframes scaleIn {
+  from { opacity: 0; transform: scale(0.95); }
+  to   { opacity: 1; transform: scale(1); }
+}
+@keyframes countUp {
+  from { opacity: 0; transform: translateY(8px); }
+  to   { opacity: 1; transform: translateY(0); }
+}
+
+.animate-fade-in-up  { animation: fadeInUp 0.5s ease-out both; }
+.animate-fade-in     { animation: fadeIn 0.4s ease-out both; }
+.animate-slide-left  { animation: slideInLeft 0.5s ease-out both; }
+.animate-slide-right { animation: slideInRight 0.5s ease-out both; }
+.animate-scale-in    { animation: scaleIn 0.35s ease-out both; }
+.animate-count-up    { animation: countUp 0.4s ease-out both; }
+
+/* Carousel crossfade — seamless dissolve */
+@keyframes carouselFadeIn {
+  0%   { opacity: 0; }
+  100% { opacity: 1; }
+}
+@keyframes carouselFadeOut {
+  0%   { opacity: 1; }
+  100% { opacity: 0; }
+}
+
+@layer utilities {
+  /* Thin, styled scrollbar for the kanban horizontal scroll area */
+  .kanban-scroll {
+    scrollbar-width: thin;
+    scrollbar-color: hsl(var(--border)) transparent;
+  }
+  .kanban-scroll::-webkit-scrollbar {
+    height: 6px;
+  }
+  .kanban-scroll::-webkit-scrollbar-track {
+    background: transparent;
+  }
+  .kanban-scroll::-webkit-scrollbar-thumb {
+    background: hsl(var(--border));
+    border-radius: 3px;
+  }
+  .kanban-scroll::-webkit-scrollbar-thumb:hover {
+    background: hsl(var(--muted-foreground) / 0.4);
+  }
+}
