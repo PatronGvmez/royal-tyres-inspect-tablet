@@ -13,7 +13,7 @@ export interface JobCard {
   vehicle_id: string;
   customer_name: string;
   license_plate: string;
-  status: 'booked' | 'in_progress' | 'test_drive' | 'completed';
+  status: 'booked' | 'in_progress' | 'completed';
   service_details: string;
   make?: string;
   model?: string;
@@ -21,6 +21,8 @@ export interface JobCard {
   image_url?: string;
   vehicle_type?: string;
   view_photos?: Partial<Record<'front' | 'rear' | 'left' | 'right' | 'top', string>>;
+  /** ID of the mechanic who created / owns this job */
+  mechanic_id?: string;
   /** Firestore server timestamp — seconds + nanoseconds, or raw ms number */
   created_at?: { seconds: number; nanoseconds: number } | number | string;
   updated_at?: string;
@@ -59,6 +61,7 @@ export interface User {
   name: string;
   role: 'admin' | 'mechanic';
   email: string;
+  avatarVariant?: '1' | '2' | '3' | '4' | '5';
 }
 
 // 360° Inspection System Types

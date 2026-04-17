@@ -3,15 +3,14 @@ import { useNavigate } from 'react-router-dom';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { motion } from 'framer-motion';
 import { useAuth } from '@/context/AuthContext';
-import { fetchJobCards, seedJobCards, createJobCard, fetchAllJobPhotos, fetchActiveNudges, dismissNudge, acknowledgeNudge } from '@/lib/firestore';
-import { mockJobCards } from '@/data/mock';
+import { fetchJobCards, createJobCard, fetchAllJobPhotos, fetchActiveNudges, dismissNudge, acknowledgeNudge, acknowledgeJob } from '@/lib/firestore';
 import { JobCard } from '@/types';
 import { Nudge } from '@/lib/firestore';
 import {
   Car, ClipboardCheck, ChevronRight, ChevronLeft, Loader2, CheckCircle2,
   Wrench, AlertCircle, Gauge, CalendarDays, Plus, X, Bell,
   User as UserIcon, Hash, FileText, Clock, TrendingUp,
-  History, RotateCcw, Eye, Search, Camera,
+  History, RotateCcw, Eye, Search, Camera, UserCheck,
 } from 'lucide-react';
 import Navbar from '@/components/layout/Navbar';
 import { ViewAngle, viewLabels, vehicleViewSVGs, VehicleType } from '@/components/inspection/VehicleSVGs';
@@ -27,38 +26,34 @@ const today = new Date().toLocaleDateString('en-ZA', {
 const statusLabel: Record<JobCard['status'], string> = {
   booked: 'Booked',
   in_progress: 'In Progress',
-  test_drive: 'Test Drive',
   completed: 'Completed',
 };
 
 const statusClass: Record<JobCard['status'], string> = {
   booked: 'status-booked',
   in_progress: 'status-in-progress',
-  test_drive: 'status-test-drive',
   completed: 'status-completed',
 };
 
 const statusAccent: Record<JobCard['status'], string> = {
   booked: 'hsl(var(--primary))',
   in_progress: 'hsl(var(--warning))',
-  test_drive: 'hsl(var(--accent))',
   completed: 'hsl(var(--success))',
 };
 
-/** Returns the CTA label for an active job card, hoisting "Add Photos" above inspection if needed. */
+/** Returns the CTA label for an active job card. */
 const getCtaLabel = (job: JobCard, hasPhotos: boolean): string => {
   if (job.status === 'booked' && !hasPhotos) return 'Add Photos';
   if (job.status === 'booked') return 'Start Inspection';
-  if (job.status === 'in_progress') return 'Continue';
-  if (job.status === 'test_drive') return 'Post-Drive Check';
+  if (job.status === 'in_progress') return 'Continue Inspection';
   return 'View Report';
 };
 
 /** Returns the 3-step workflow state for the progress strip. */
 const getWorkflowSteps = (job: JobCard, hasPhotos: boolean) => [
-  { label: 'Booked',  done: true,                                       active: !hasPhotos && job.status === 'booked' },
-  { label: 'Photos',  done: hasPhotos || job.status !== 'booked',        active: !hasPhotos && job.status === 'booked' },
-  { label: 'Inspect', done: job.status === 'in_progress' || job.status === 'test_drive' || job.status === 'completed', active: hasPhotos && job.status === 'booked' || job.status === 'in_progress' },
+  { label: 'Booked',  done: true,                                          active: !hasPhotos && job.status === 'booked' },
+  { label: 'Photos',  done: hasPhotos || job.status !== 'booked',           active: !hasPhotos && job.status === 'booked' },
+  { label: 'Inspect', done: job.status === 'in_progress' || job.status === 'completed', active: hasPhotos && job.status === 'booked' || job.status === 'in_progress' },
 ];
 
 const VIEW_ANGLES: ViewAngle[] = ['front', 'rear', 'left', 'right', 'top'];
@@ -143,11 +138,9 @@ const MechanicDashboard = () => {
     queryKey: ['jobs'],
     queryFn: async () => {
       try {
-        await seedJobCards(mockJobCards);
-        const jobs = await fetchJobCards();
-        return jobs.length > 0 ? jobs : mockJobCards;
+        return await fetchJobCards();
       } catch {
-        return mockJobCards;
+        return [];
       }
     },
     refetchInterval: 15_000,
@@ -195,6 +188,7 @@ const MechanicDashboard = () => {
         make: data.make.trim() || undefined,
         model: data.model.trim() || undefined,
         year: data.year ? Number(data.year) : undefined,
+        mechanic_id: user?.id,
       }),
     onSuccess: (newJob) => {
       queryClient.invalidateQueries({ queryKey: ['jobs'] });
@@ -207,6 +201,15 @@ const MechanicDashboard = () => {
     onError: () => toast.error('Failed to create job card — please try again.'),
   });
 
+  const acknowledgeJobMutation = useMutation({
+    mutationFn: (jobId: string) => acknowledgeJob(jobId, user!.id),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['jobs'] });
+      toast.success('Job claimed! It\'s now in your queue.');
+    },
+    onError: () => toast.error('Failed to claim job — please try again.'),
+  });
+
   const reInspectMutation = useMutation({
     mutationFn: (job: JobCard) =>
       createJobCard({
@@ -217,6 +220,7 @@ const MechanicDashboard = () => {
         status: 'booked',
         image_url: job.image_url,
         vehicle_type: job.vehicle_type,
+        mechanic_id: user?.id,
       }),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['jobs'] });
@@ -242,19 +246,24 @@ const MechanicDashboard = () => {
     j.id.toLowerCase().includes(searchLower) ||
     j.service_details.toLowerCase().includes(searchLower);
 
-  const activeJobs = allJobs.filter(
+  // Jobs with no mechanic assigned — the available pool any mechanic can claim
+  const availableJobs = allJobs.filter(j => !j.mechanic_id && j.status === 'booked' && matchesSearch(j));
+
+  // This mechanic's own jobs
+  const myJobs = allJobs.filter(j => j.mechanic_id === user?.id);
+  const activeJobs = myJobs.filter(
     j => j.status !== 'completed' &&
     matchesSearch(j) &&
     (statusFilter === 'all' || j.status === statusFilter)
   );
-  const completedJobs = allJobs.filter(
+  const completedJobs = myJobs.filter(
     j => j.status === 'completed' &&
     matchesSearch(j) &&
     (statusFilter === 'all' || statusFilter === 'completed')
   );
-  const inProgressCount = allJobs.filter(j => j.status === 'in_progress').length;
-  const bookedCount = allJobs.filter(j => j.status === 'booked').length;
-  const hasNoResults = searchQuery.trim() !== '' && activeJobs.length === 0 && completedJobs.length === 0;
+  const inProgressCount = myJobs.filter(j => j.status === 'in_progress').length;
+  const bookedCount = myJobs.filter(j => j.status === 'booked').length;
+  const hasNoResults = searchQuery.trim() !== '' && availableJobs.length === 0 && activeJobs.length === 0 && completedJobs.length === 0;
 
   return (
     <div className="min-h-screen bg-background pb-16">
@@ -345,8 +354,10 @@ const MechanicDashboard = () => {
                     <TrendingUp className="w-3.5 h-3.5 text-primary flex-shrink-0" />
                     <p className="text-xs text-foreground">
                       {activeJobs.length > 0
-                        ? <><span className="font-bold text-primary">{activeJobs.length}</span> job{activeJobs.length !== 1 ? 's' : ''} in queue today</>
-                        : <span className="text-muted-foreground">All clear — no active jobs</span>}
+                        ? <><span className="font-bold text-primary">{activeJobs.length}</span> job{activeJobs.length !== 1 ? 's' : ''} in your queue</>
+                        : availableJobs.length > 0
+                          ? <><span className="font-bold text-primary">{availableJobs.length}</span> job{availableJobs.length !== 1 ? 's' : ''} available to claim</>
+                          : <span className="text-muted-foreground">All clear — no active jobs</span>}
                     </p>
                   </div>
 
@@ -460,6 +471,82 @@ const MechanicDashboard = () => {
                     <X className="w-3.5 h-3.5" /> Clear filters
                   </button>
                 </div>
+              )}
+
+              {/* Available (unassigned) jobs — pool to claim */}
+              {availableJobs.length > 0 && (
+                <section>
+                  <div className="flex items-center gap-2 mb-3">
+                    <div className="flex items-center gap-2 flex-1">
+                      <span className="flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-primary/10 border border-primary/20 text-primary text-[11px] font-bold uppercase tracking-wide">
+                        <UserCheck className="w-3 h-3" /> Available
+                      </span>
+                      <span className="text-[10px] text-muted-foreground">{availableJobs.length} job{availableJobs.length !== 1 ? 's' : ''} waiting to be claimed</span>
+                    </div>
+                  </div>
+
+                  <div className="space-y-2.5">
+                    {availableJobs.map(job => (
+                      <div
+                        key={job.id}
+                        className="card-elevated overflow-hidden border-l-4 border-l-primary/60"
+                      >
+                        <div className="flex items-start gap-3 p-4">
+                          {/* Vehicle icon */}
+                          <div className="w-14 h-14 rounded-xl overflow-hidden shrink-0 border border-border bg-muted flex items-center justify-center" style={{ background: 'var(--vehicle-card-bg)' }}>
+                            {(() => {
+                              const type = (vehicleViewSVGs[job.vehicle_type as VehicleType] ? job.vehicle_type : 'sedan') as VehicleType;
+                              const SVGComp = vehicleViewSVGs[type].front;
+                              return <SVGComp className="w-full h-full p-1.5" style={{ color: 'hsl(var(--primary))' }} />;
+                            })()}
+                          </div>
+
+                          {/* Details */}
+                          <div className="flex-1 min-w-0">
+                            <div className="flex items-center justify-between gap-2 flex-wrap">
+                              <p className="text-sm font-bold text-foreground">{job.customer_name}</p>
+                              <span className="text-[10px] font-mono font-bold text-foreground bg-muted px-2 py-0.5 rounded tracking-widest border border-border shrink-0">{job.license_plate}</span>
+                            </div>
+                            {(job.make || job.model || job.year) && (
+                              <p className="text-[11px] text-muted-foreground mt-0.5">
+                                {[job.make, job.model, job.year].filter(Boolean).join(' · ')}
+                              </p>
+                            )}
+                            <p className="text-xs text-muted-foreground mt-1 line-clamp-2">{job.service_details}</p>
+                          </div>
+                        </div>
+
+                        {/* Acknowledge CTA */}
+                        <div className="px-4 pb-4">
+                          <button
+                            onClick={() => {
+                              if (acknowledgeJobMutation.isPending) return;
+                              acknowledgeJobMutation.mutate(job.id);
+                            }}
+                            disabled={acknowledgeJobMutation.isPending}
+                            className="w-full flex items-center justify-center gap-2 px-4 py-2.5 rounded-xl bg-primary text-primary-foreground text-sm font-bold hover:opacity-90 active:scale-[.98] transition-all disabled:opacity-50"
+                          >
+                            {acknowledgeJobMutation.isPending ? (
+                              <Loader2 className="w-4 h-4 animate-spin" />
+                            ) : (
+                              <UserCheck className="w-4 h-4" />
+                            )}
+                            Acknowledge &amp; Claim Job
+                          </button>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+
+                  {/* Divider before my jobs */}
+                  {(activeJobs.length > 0 || completedJobs.length > 0) && (
+                    <div className="flex items-center gap-3 mt-6 mb-2">
+                      <div className="flex-1 h-px bg-border" />
+                      <span className="text-[10px] font-semibold uppercase tracking-widest text-muted-foreground">My Jobs</span>
+                      <div className="flex-1 h-px bg-border" />
+                    </div>
+                  )}
+                </section>
               )}
 
               {/* Active jobs */}
@@ -607,8 +694,8 @@ const MechanicDashboard = () => {
                 </section>
               )}
 
-              {/* Empty state */}
-              {activeJobs.length === 0 && (
+              {/* Empty state — only show when no available jobs AND no my jobs */}
+              {activeJobs.length === 0 && availableJobs.length === 0 && (
                 <div className="card-elevated p-14 text-center">
                   <div className="w-16 h-16 rounded-2xl bg-muted flex items-center justify-center mx-auto mb-4">
                     <CheckCircle2 className="w-8 h-8 text-muted-foreground opacity-40" />

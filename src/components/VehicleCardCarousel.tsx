@@ -24,7 +24,8 @@ const VehicleCardCarousel = ({
   const [isHovered, setIsHovered] = useState(false);
   const clearRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
-  const type = (vehicleViewSVGs[vehicleType as VehicleType] ? vehicleType : 'sedan') as VehicleType;
+  const normalizedType = vehicleType?.toLowerCase() as VehicleType;
+  const type = (vehicleViewSVGs[normalizedType] ? normalizedType : 'sedan') as VehicleType;
 
   const transition = (next: number) => {
     setActiveIdx((cur) => {

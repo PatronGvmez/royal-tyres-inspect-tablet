@@ -4,6 +4,7 @@ import { useAuth } from '@/context/AuthContext';
 import { Loader2, AlertCircle, Eye, EyeOff, Check } from 'lucide-react';
 import RoyalTyresIcon from '@/components/RoyalTyresIcon';
 import { motion } from 'framer-motion';
+import { firebaseConfigured } from '@/lib/firebase';
 
 function getFirebaseErrorMessage(code: string, message?: string): string {
   // Handle custom domain error messages
@@ -166,6 +167,18 @@ const LoginPage = () => {
 
       {/* ── Right form panel ── */}
       <div className="flex-1 flex flex-col justify-center items-center px-6 py-12 bg-[#f8fafc]">
+        {/* Firebase misconfiguration banner */}
+        {!firebaseConfigured && (
+          <div className="w-full max-w-[400px] mb-6 flex gap-2 items-start rounded-lg border border-amber-300 bg-amber-50 p-4 text-sm text-amber-800">
+            <AlertCircle className="w-4 h-4 mt-0.5 flex-shrink-0" />
+            <div>
+              <strong>Firebase not configured.</strong> Create a{' '}
+              <code className="bg-amber-100 px-1 rounded">.env.local</code> file from{' '}
+              <code className="bg-amber-100 px-1 rounded">.env.example</code> and add your Firebase credentials.
+            </div>
+          </div>
+        )}
+
         {/* Mobile logo */}
         <div className="lg:hidden flex items-center gap-2 mb-8">
           <RoyalTyresIcon size={36} className="rounded-xl" />

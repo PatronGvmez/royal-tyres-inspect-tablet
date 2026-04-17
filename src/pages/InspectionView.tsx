@@ -7,6 +7,7 @@ import { VehicleDamage, InspectionReport } from '@/types';
 import { ArrowLeft, Check, Trash2, Box, Loader2, Sun, Moon, AlertCircle } from 'lucide-react';
 import { useTheme } from '@/hooks/use-theme';
 import CarDiagram, { TyreOverlay } from '@/components/inspection/CarDiagram';
+import { TYRE_CONDITIONS, TYRE_POSITIONS, TYRE_WHEEL_COORDS } from '@/lib/tyreUtils';
 import Vehicle3DModel from '@/components/vehicle-3d/Vehicle3DModelWrapper';
 import { ErrorBoundary } from '@/components/layout/ErrorBoundary';
 import DamageModal from '@/components/inspection/DamageModal';
@@ -15,60 +16,6 @@ import { saveInspectionReport, updateJobCardStatus, fetchJobCardById, fetchJobPh
 import { vehicleViewSVGs, VehicleType } from '@/components/inspection/VehicleSVGs';
 
 const fuelLevels = ['Empty', '1/4', '1/2', '3/4', 'Full'];
-
-const TYRE_CONDITIONS = [
-  { value: 'very_bad',    label: 'Very Bad',           color: '#b91c1c', bg: '#fef2f2', border: '#fca5a5' },
-  { value: 'poor',        label: 'Poor',               color: '#c2410c', bg: '#fff7ed', border: '#fdba74' },
-  { value: 'fair',        label: 'Fair / Worn',         color: '#b45309', bg: '#fffbeb', border: '#fcd34d' },
-  { value: 'good',        label: 'Good',               color: '#15803d', bg: '#f0fdf4', border: '#86efac' },
-  { value: 'new',         label: 'New (Recently Replaced)', color: '#1d4ed8', bg: '#eff6ff', border: '#93c5fd' },
-] as const;
-
-const TYRE_POSITIONS = [
-  { key: 'front_left'  as const, label: 'Front Left'  },
-  { key: 'front_right' as const, label: 'Front Right' },
-  { key: 'rear_left'   as const, label: 'Rear Left'   },
-  { key: 'rear_right'  as const, label: 'Rear Right'  },
-];
-
-// Per-vehicle-type wheel centre coordinates (%x, %y) within the diagram container.
-// front/rear views: driver side = viewer's right (~67%), passenger = viewer's left (~33%).
-// side views: front of car at left edge of image, rear at right edge.
-// top view: bird's-eye, front at top. x=60/40 targets wheel arch corners inside the body.
-// Drag-to-adjust overrides these defaults at runtime.
-type TyrePositionMap = Record<string, Partial<Record<string, { x: number; y: number }>>>;
-const TYRE_WHEEL_COORDS: Record<string, TyrePositionMap> = {
-  sedan: {
-    front_left:  { front: { x: 67, y: 80 }, left:  { x: 24, y: 76 }, top: { x: 60, y: 23 } },
-    front_right: { front: { x: 33, y: 80 }, right: { x: 76, y: 76 }, top: { x: 40, y: 23 } },
-    rear_left:   { rear:  { x: 67, y: 80 }, left:  { x: 76, y: 76 }, top: { x: 60, y: 73 } },
-    rear_right:  { rear:  { x: 33, y: 80 }, right: { x: 24, y: 76 }, top: { x: 40, y: 73 } },
-  },
-  hatchback: {
-    front_left:  { front: { x: 67, y: 80 }, left:  { x: 24, y: 75 }, top: { x: 60, y: 22 } },
-    front_right: { front: { x: 33, y: 80 }, right: { x: 76, y: 75 }, top: { x: 40, y: 22 } },
-    rear_left:   { rear:  { x: 67, y: 80 }, left:  { x: 76, y: 75 }, top: { x: 60, y: 74 } },
-    rear_right:  { rear:  { x: 33, y: 80 }, right: { x: 24, y: 75 }, top: { x: 40, y: 74 } },
-  },
-  suv: {
-    front_left:  { front: { x: 67, y: 77 }, left:  { x: 25, y: 71 }, top: { x: 59, y: 21 } },
-    front_right: { front: { x: 33, y: 77 }, right: { x: 75, y: 71 }, top: { x: 41, y: 21 } },
-    rear_left:   { rear:  { x: 67, y: 77 }, left:  { x: 75, y: 71 }, top: { x: 59, y: 75 } },
-    rear_right:  { rear:  { x: 33, y: 77 }, right: { x: 25, y: 71 }, top: { x: 41, y: 75 } },
-  },
-  bakkie: {
-    front_left:  { front: { x: 67, y: 75 }, left:  { x: 23, y: 70 }, top: { x: 60, y: 20 } },
-    front_right: { front: { x: 33, y: 75 }, right: { x: 77, y: 70 }, top: { x: 40, y: 20 } },
-    rear_left:   { rear:  { x: 67, y: 75 }, left:  { x: 77, y: 71 }, top: { x: 60, y: 77 } },
-    rear_right:  { rear:  { x: 33, y: 75 }, right: { x: 23, y: 71 }, top: { x: 40, y: 77 } },
-  },
-  truck: {
-    front_left:  { front: { x: 67, y: 73 }, left:  { x: 22, y: 68 }, top: { x: 60, y: 19 } },
-    front_right: { front: { x: 33, y: 73 }, right: { x: 78, y: 68 }, top: { x: 40, y: 19 } },
-    rear_left:   { rear:  { x: 67, y: 73 }, left:  { x: 77, y: 70 }, top: { x: 60, y: 78 } },
-    rear_right:  { rear:  { x: 33, y: 73 }, right: { x: 23, y: 70 }, top: { x: 40, y: 78 } },
-  },
-};
 
 const InspectionView = () => {
   const { id } = useParams<{ id: string }>();

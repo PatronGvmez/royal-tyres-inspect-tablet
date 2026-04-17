@@ -226,10 +226,9 @@ export const StatsModel = {
         completed: allJobs.filter((j) => j.status === 'completed').length,
         in_progress: allJobs.filter((j) => j.status === 'in_progress').length,
         booked: allJobs.filter((j) => j.status === 'booked').length,
-        test_drive: allJobs.filter((j) => j.status === 'test_drive').length,
       };
     } catch {
-      return { total: 0, completed: 0, in_progress: 0, booked: 0, test_drive: 0 };
+      return { total: 0, completed: 0, in_progress: 0, booked: 0 };
     }
   },
 

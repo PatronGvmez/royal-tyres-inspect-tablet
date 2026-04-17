@@ -1,9 +1,11 @@
 import React from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { useQuery } from '@tanstack/react-query';
-import { fetchInspectionReport, fetchJobCardById, fetchJobPhotos } from '@/lib/firestore';
+import { fetchInspectionReport, fetchJobCardById, fetchJobPhotos, getUserProfile } from '@/lib/firestore';
 import { mockJobCards } from '@/data/mock';
-import { ArrowLeft, Loader2, Gauge, Fuel, Car, AlertTriangle, CheckCircle2, Sun, Moon } from 'lucide-react';
+import { ArrowLeft, Loader2, Gauge, Fuel, Car, AlertTriangle, CheckCircle2, Sun, Moon, Wrench, User as UserIcon } from 'lucide-react';
+import { User } from '@/types';
+import { buildTyreOverlays, TYRE_CONDITIONS } from '@/lib/tyreUtils';
 import { useTheme } from '@/hooks/use-theme';
 import CarDiagram from '@/components/inspection/CarDiagram';
 import { vehicleViewSVGs, VehicleType } from '@/components/inspection/VehicleSVGs';
@@ -49,6 +51,12 @@ const InspectionReportView: React.FC = () => {
     enabled: !!id,
   });
 
+  const { data: mechanic } = useQuery<User | null>({
+    queryKey: ['user', job?.mechanic_id],
+    queryFn: () => getUserProfile(job!.mechanic_id!),
+    enabled: !!job?.mechanic_id,
+  });
+
   const isLoading = jobLoading || reportLoading;
 
   if (isLoading) {
@@ -69,6 +77,8 @@ const InspectionReportView: React.FC = () => {
 
   const vehicleType = (vehicleViewSVGs[job.vehicle_type as VehicleType] ? job.vehicle_type : 'sedan') as VehicleType;
   const VehicleImg = vehicleViewSVGs[vehicleType].front;
+
+  const tyreOverlays = report ? buildTyreOverlays(report.tire_conditions, vehicleType) : {};
 
   const sectionCls = 'bg-card border border-border rounded-2xl p-5 space-y-4';
   const headingCls = 'text-xs font-semibold uppercase tracking-widest text-muted-foreground';
@@ -121,6 +131,41 @@ const InspectionReportView: React.FC = () => {
             </div>
             <span className="self-start sm:self-auto text-[10px] font-mono bg-muted text-muted-foreground px-2.5 py-1 rounded-full border border-border">{job.id}</span>
           </div>
+        </div>
+
+        {/* ── Assigned Mechanic ── */}
+        <div className={sectionCls}>
+          <p className={headingCls}>Assigned Mechanic</p>
+          {mechanic ? (
+            <div className="flex items-center gap-3">
+              <div className="w-11 h-11 rounded-full bg-primary/10 flex items-center justify-center overflow-hidden flex-shrink-0 border border-border">
+                {mechanic.avatarVariant ? (
+                  <img
+                    src={['1','2'].includes(mechanic.avatarVariant) ? `/mechanic${mechanic.avatarVariant}.png` : `/mechenic${mechanic.avatarVariant}.png`}
+                    alt={mechanic.name}
+                    className="w-full h-full object-contain"
+                    onError={(e) => { (e.target as HTMLImageElement).style.display = 'none'; }}
+                  />
+                ) : (
+                  <UserIcon className="w-5 h-5 text-primary" />
+                )}
+              </div>
+              <div className="flex-1 min-w-0">
+                <p className="text-sm font-semibold text-foreground truncate">{mechanic.name}</p>
+                <p className="text-xs text-muted-foreground truncate">{mechanic.email}</p>
+              </div>
+              <span className="text-[10px] font-bold px-2.5 py-1 rounded-full bg-primary/10 text-primary border border-primary/20 capitalize flex items-center gap-1">
+                <Wrench className="w-3 h-3" />{mechanic.role}
+              </span>
+            </div>
+          ) : job?.mechanic_id ? (
+            <div className="flex items-center gap-2 text-sm text-muted-foreground">
+              <Loader2 className="w-4 h-4 animate-spin" />
+              Loading mechanic info...
+            </div>
+          ) : (
+            <p className="text-sm text-muted-foreground">No mechanic assigned to this job</p>
+          )}
         </div>
 
         {/* ── No report saved yet ── */}
@@ -178,7 +223,11 @@ const InspectionReportView: React.FC = () => {
                 ).map(([label, value]) => (
                   <div key={label} className="p-3 rounded-xl bg-muted/50 border border-border">
                     <p className={labelCls}>{label}</p>
-                    <p className={`${valueCls} mt-0.5`}>{value || <span className="text-muted-foreground italic font-normal">Not recorded</span>}</p>
+                    <p className={`${valueCls} mt-0.5`}>
+                      {value
+                        ? (TYRE_CONDITIONS.find(c => c.value === value)?.label ?? value)
+                        : <span className="text-muted-foreground italic font-normal">Not recorded</span>}
+                    </p>
                   </div>
                 ))}
               </div>
@@ -195,15 +244,14 @@ const InspectionReportView: React.FC = () => {
                 )}
               </div>
 
-              {/* Read-only diagram */}
-              <div className="pointer-events-none select-none">
-                <CarDiagram
-                  damages={report.damages}
-                  onAreaClick={() => {}}
-                  vehicleType={vehicleType}
-                  photos={photos as Partial<Record<import('@/components/inspection/VehicleSVGs').ViewAngle, string>>}
-                />
-              </div>
+              {/* Read-only diagram — pointer events needed for tab buttons to work */}
+              <CarDiagram
+                damages={report.damages}
+                onAreaClick={() => {}}
+                vehicleType={vehicleType}
+                photos={photos as Partial<Record<import('@/components/inspection/VehicleSVGs').ViewAngle, string>>}
+                tyreOverlays={tyreOverlays as any}
+              />
 
               {/* Damage list */}
               {report.damages.length === 0 && (

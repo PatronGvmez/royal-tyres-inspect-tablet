@@ -26,15 +26,16 @@ interface CarDiagramProps {
 const vehicleTypes: VehicleType[] = ['sedan', 'hatchback', 'suv', 'bakkie', 'truck'];
 const viewAngles: ViewAngle[] = ['front', 'rear', 'left', 'right', 'top'];
 
-const CarDiagram: React.FC<CarDiagramProps> = ({ damages, onAreaClick, vehicleType = 'sedan', onVehicleTypeChange, photos, tyreOverlays, onTyrePositionChange }) => {
-  const [selectedType, setSelectedType] = useState<VehicleType>(vehicleType);
+const CarDiagram: React.FC<CarDiagramProps> = ({ damages, onAreaClick, onRemoveDamage, vehicleType = 'sedan', onVehicleTypeChange, photos, tyreOverlays, onTyrePositionChange }) => {
+  const normalizedVehicleType = (vehicleType?.toLowerCase() as VehicleType) || 'sedan';
+  const [selectedType, setSelectedType] = useState<VehicleType>(normalizedVehicleType);
   const [activeView, setActiveView] = useState<ViewAngle>('front');
   const [dragging, setDragging] = useState<string | null>(null);
   const diagramRef = useRef<HTMLDivElement>(null);
 
   // Sync when parent updates vehicleType (e.g. after job card loads)
   useEffect(() => {
-    setSelectedType(vehicleType);
+    setSelectedType((vehicleType?.toLowerCase() as VehicleType) || 'sedan');
   }, [vehicleType]);
 
   const handleTypeChange = (type: VehicleType) => {
@@ -174,19 +175,56 @@ const CarDiagram: React.FC<CarDiagramProps> = ({ damages, onAreaClick, vehicleTy
           );
         })}
 
-        {/* Damage pins */}
+        {/* Damage pins — same label+dot style as tyre overlays */}
         {viewDamages.map((d) => {
           const globalIdx = damages.indexOf(d);
+          const isMinor = d.severity === 'minor';
+          const pinColor = isMinor ? 'hsl(var(--warning))' : 'hsl(var(--accent))';
+          // Abbreviate compound location prefixes so labels stay compact
+          const shortPart = d.part
+            .replace('Front Left', 'FL').replace('Front Right', 'FR')
+            .replace('Rear Left', 'RL').replace('Rear Right', 'RR');
           return (
             <div
               key={globalIdx}
-              className={`damage-pin z-20 ${d.severity === 'major' ? 'damage-pin-major' : 'damage-pin-minor'}`}
-              style={{ position: 'absolute', left: `${d.coordinates.x}%`, top: `${d.coordinates.y}%` }}
-              title={`${d.part}: ${d.damage_type} (${d.severity})`}
+              className="absolute z-20"
+              style={{ left: `${d.coordinates.x}%`, top: `${d.coordinates.y}%` }}
             >
-              <span className="absolute -top-5 left-1/2 -translate-x-1/2 text-[9px] font-bold whitespace-nowrap bg-foreground text-background px-1.5 py-0.5 rounded opacity-0 group-hover:opacity-100 transition-opacity pointer-events-none">
-                {d.part}
-              </span>
+              {/* Pill label above the dot */}
+              <div
+                className="absolute z-30 rounded shadow-md select-none text-center"
+                style={{
+                  background: pinColor,
+                  color: '#fff',
+                  bottom: '100%',
+                  left: '50%',
+                  transform: 'translateX(-50%)',
+                  marginBottom: '3px',
+                  padding: '2px 6px',
+                  whiteSpace: 'nowrap',
+                }}
+              >
+                <div className="text-[8px] font-bold leading-tight">{shortPart}</div>
+                <div className="text-[7px] opacity-80 capitalize leading-tight">
+                  {d.damage_type} · {d.severity}
+                </div>
+                {onRemoveDamage && (
+                  <button
+                    className="absolute -top-1.5 -right-1.5 w-3.5 h-3.5 rounded-full bg-black/50 text-white flex items-center justify-center text-[9px] font-bold hover:bg-black/80 leading-none"
+                    onClick={(e) => { e.stopPropagation(); onRemoveDamage(globalIdx); }}
+                    title="Remove damage"
+                  >×</button>
+                )}
+              </div>
+              {/* Dot centred on the coordinate */}
+              <div
+                className="w-6 h-6 rounded-full border-2 border-white shadow-lg flex items-center justify-center cursor-pointer hover:scale-110 transition-transform"
+                style={{ background: pinColor, transform: 'translate(-50%, -50%)' }}
+                onClick={(e) => { e.stopPropagation(); onRemoveDamage?.(globalIdx); }}
+                title={`${d.part}: ${d.damage_type} (${d.severity}) — click to remove`}
+              >
+                <div className="w-2.5 h-2.5 rounded-full border border-white/70" />
+              </div>
             </div>
           );
         })}

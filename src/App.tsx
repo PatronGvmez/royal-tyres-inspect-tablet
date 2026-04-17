@@ -54,6 +54,7 @@ const App = () => (
             <Route path="/mechanic/report/:id" element={<ProtectedRoute role="mechanic"><InspectionReportView /></ProtectedRoute>} />
             <Route path="/admin" element={<ProtectedRoute role="admin"><AdminDashboard /></ProtectedRoute>} />
             <Route path="/admin/users" element={<ProtectedRoute role="admin"><UsersManagement /></ProtectedRoute>} />
+            <Route path="/admin/users/:userId" element={<ProtectedRoute role="admin"><ProfilePage /></ProtectedRoute>} />
             <Route path="/admin/inspection/:id" element={<ProtectedRoute role="admin"><InspectionDetail /></ProtectedRoute>} />
             <Route path="/profile" element={<AnyAuthRoute><ProfilePage /></AnyAuthRoute>} />
             <Route path="*" element={<NotFound />} />

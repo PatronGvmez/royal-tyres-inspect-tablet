@@ -8,7 +8,7 @@ import {
   signOut,
   updateProfile,
 } from 'firebase/auth';
-import { auth } from '@/lib/firebase';
+import { auth, firebaseConfigured } from '@/lib/firebase';
 import { getUserProfile, createUserProfile, updateUserProfile } from '@/lib/firestore';
 import { User } from '@/types';
 
@@ -43,7 +43,18 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
+    // If Firebase was not configured (missing .env.local), skip auth listener
+    if (!firebaseConfigured || !auth) {
+      setLoading(false);
+      return;
+    }
+
+    // Safety timeout — if onAuthStateChanged never fires (bad credentials),
+    // release the loading gate after 8 seconds so the UI isn't stuck blank.
+    const timeout = setTimeout(() => setLoading(false), 8000);
+
     const unsubscribe = onAuthStateChanged(auth, async (firebaseUser) => {
+      clearTimeout(timeout);
       try {
         if (firebaseUser) {
           let profile = await getUserProfile(firebaseUser.uid);
@@ -78,7 +89,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         setLoading(false);
       }
     });
-    return unsubscribe;
+    return () => { clearTimeout(timeout); unsubscribe(); };
   }, []);
 
   const loginWithEmail = async (

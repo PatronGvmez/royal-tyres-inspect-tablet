@@ -1,6 +1,6 @@
-import { initializeApp } from 'firebase/app';
-import { getAuth } from 'firebase/auth';
-import { getFirestore } from 'firebase/firestore';
+import { initializeApp, type FirebaseApp } from 'firebase/app';
+import { getAuth, type Auth } from 'firebase/auth';
+import { getFirestore, type Firestore } from 'firebase/firestore';
 
 // Load Firebase configuration from environment variables
 const firebaseConfig = {
@@ -14,27 +14,40 @@ const firebaseConfig = {
 };
 
 // Validate that all required environment variables are set
-const requiredEnvVars = [
+const missingVars = [
   'VITE_FIREBASE_API_KEY',
   'VITE_FIREBASE_AUTH_DOMAIN',
   'VITE_FIREBASE_PROJECT_ID',
   'VITE_FIREBASE_STORAGE_BUCKET',
   'VITE_FIREBASE_MESSAGING_SENDER_ID',
   'VITE_FIREBASE_APP_ID',
-];
+].filter((v) => !import.meta.env[v]);
 
-for (const envVar of requiredEnvVars) {
-  if (!import.meta.env[envVar]) {
-    console.error(
-      `Missing required environment variable: ${envVar}. ` +
-      'Please check your .env.local file or environment configuration.'
-    );
-  }
+if (missingVars.length > 0) {
+  console.error(
+    '[Firebase] Missing environment variables:',
+    missingVars.join(', '),
+    '\nCreate a .env.local file based on .env.example and fill in your Firebase project credentials.'
+  );
 }
 
-const app = initializeApp(firebaseConfig);
+export const firebaseConfigured = missingVars.length === 0;
 
-export const auth = getAuth(app);
-export const db = getFirestore(app);
+let app: FirebaseApp;
+let auth: Auth;
+let db: Firestore;
 
-export default app;
+try {
+  app = initializeApp(firebaseConfig);
+  auth = getAuth(app);
+  db = getFirestore(app);
+} catch (err) {
+  console.error('[Firebase] Initialization failed:', err);
+  // Re-export as undefined so callers can detect misconfiguration
+  app = undefined as unknown as FirebaseApp;
+  auth = undefined as unknown as Auth;
+  db = undefined as unknown as Firestore;
+}
+
+export { auth, db };
+export default app!;

@@ -139,24 +139,7 @@
     color: hsl(var(--success));
   }
 
-  .damage-pin {
-    @apply absolute w-5 h-5 rounded-full border-2 border-card cursor-pointer transform -translate-x-1/2 -translate-y-1/2 z-10;
-    box-shadow: 0 2px 6px rgb(0 0 0 / 0.3);
-    transition: all 0.2s ease-in-out;
-  }
-
-  .damage-pin:hover {
-    transform: translate(-50%, -50%) scale(1.2);
-    box-shadow: 0 4px 12px rgb(0 0 0 / 0.4);
-  }
-
-  .damage-pin-minor {
-    background: hsl(var(--warning));
-  }
-
-  .damage-pin-major {
-    background: hsl(var(--accent));
-  }
+  /* damage-pin classes removed — pins now use inline overlay style matching tyre condition dots */
 }
 
 /* ─── Animation Keyframes ─── */

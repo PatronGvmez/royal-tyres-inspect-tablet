@@ -3,10 +3,9 @@ import { useNavigate } from 'react-router-dom';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { motion } from 'framer-motion';
 import { useAuth } from '@/context/AuthContext';
-import { fetchJobCards, seedJobCards, fetchAllJobPhotos, sendNudge, fetchActiveNudges, fetchNudgesForJob, Nudge } from '@/lib/firestore';
-import { mockJobCards } from '@/data/mock';
+import { fetchJobCards, fetchAllJobPhotos, sendNudge, fetchActiveNudges, fetchNudgesForJob, Nudge } from '@/lib/firestore';
 import { JobCard } from '@/types';
-import { Eye, Loader2, DatabaseIcon, CheckCircle2, Camera, Bell, X, Users, Clock, LayoutGrid, List } from 'lucide-react';
+import { Eye, Loader2, CheckCircle2, Camera, Bell, X, Users, Clock, LayoutGrid, List } from 'lucide-react';
 import Navbar from '@/components/layout/Navbar';
 import { vehicleViewSVGs, VehicleType } from '@/components/inspection/VehicleSVGs';
 import VehicleCardCarousel from '@/components/VehicleCardCarousel';
@@ -16,20 +15,18 @@ import { toast } from 'sonner';
 const getWorkflowSteps = (job: JobCard, hasPhotos: boolean) => [
   { label: 'Booked',  done: true },
   { label: 'Photos',  done: hasPhotos || job.status !== 'booked' },
-  { label: 'Inspect', done: job.status === 'in_progress' || job.status === 'test_drive' || job.status === 'completed' },
+  { label: 'Inspect', done: job.status === 'in_progress' || job.status === 'completed' },
 ];
 
 const statusLabel: Record<JobCard['status'], string> = {
   booked: 'Booked',
   in_progress: 'In Progress',
-  test_drive: 'Test Drive',
   completed: 'Completed',
 };
 
 const statusClass: Record<JobCard['status'], string> = {
   booked: 'status-booked',
   in_progress: 'status-in-progress',
-  test_drive: 'status-test-drive',
   completed: 'status-completed',
 };
 
@@ -79,15 +76,6 @@ const AdminDashboard = () => {
   // Convenience: front-only map for hasPhotos checks
   const frontPhotos: Record<string, string> = {};
   for (const [id, p] of Object.entries(allPhotos)) { if (p.front) frontPhotos[id] = p.front; }
-
-  const seedMutation = useMutation({
-    mutationFn: () => seedJobCards(mockJobCards),
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['jobs'] });
-      toast.success('Sample data loaded into Firestore!');
-    },
-    onError: () => toast.error('Failed to seed data'),
-  });
 
   const nudgeMutation = useMutation({
     mutationFn: ({ job, message }: { job: JobCard; message: string }) =>
@@ -152,16 +140,6 @@ const AdminDashboard = () => {
               <Users className="w-4 h-4" />
               <span className="hidden sm:inline">Users</span>
             </button>
-            {!isLoading && jobs.length === 0 && (
-              <button
-                onClick={() => seedMutation.mutate()}
-                disabled={seedMutation.isPending}
-                className="flex items-center gap-2 px-3 py-2 rounded-lg bg-muted text-sm text-muted-foreground hover:bg-secondary transition-colors disabled:opacity-60"
-              >
-                {seedMutation.isPending ? <Loader2 className="w-4 h-4 animate-spin" /> : <DatabaseIcon className="w-4 h-4" />}
-                Load Sample Data
-              </button>
-            )}
           </div>
         </div>
         {isLoading ? (

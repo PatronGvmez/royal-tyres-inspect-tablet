@@ -67,7 +67,7 @@ const HatchbackRearImg: React.FC<VehicleSVGProps> = ({ className, style }) => (
 // ─── SUV ───
 
 const SUVTopImg: React.FC<VehicleSVGProps> = ({ className, style }) => (
-  <VehicleImg src="/SUV_TOP.png" alt="SUV Top View" className={className} style={style} />
+  <VehicleImg src="/SUV_Top.png" alt="SUV Top View" className={className} style={style} />
 );
 
 const SUVLeftImg: React.FC<VehicleSVGProps> = ({ className, style }) => (
@@ -79,7 +79,7 @@ const SUVRightImg: React.FC<VehicleSVGProps> = ({ className, style }) => (
 );
 
 const SUVFrontImg: React.FC<VehicleSVGProps> = ({ className, style }) => (
-  <VehicleImg src="/SUV_FRONT.png" alt="SUV Front View" className={className} style={style} />
+  <VehicleImg src="/SUV_Front.png" alt="SUV Front View" className={className} style={style} />
 );
 
 const SUVRearImg: React.FC<VehicleSVGProps> = ({ className, style }) => (

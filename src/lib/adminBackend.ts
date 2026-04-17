@@ -142,7 +142,6 @@ export async function getAdminStats(
     completed_jobs: number;
     in_progress_jobs: number;
     booked_jobs: number;
-    test_drive_jobs: number;
     completion_rate: number;
     average_inspection_time: number;
     most_common_damage_type: string;

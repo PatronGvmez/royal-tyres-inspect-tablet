@@ -3,10 +3,9 @@ import { useNavigate } from 'react-router-dom';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { useAuth } from '@/context/AuthContext';
 import { UserModel } from '@/lib/firestoreModels';
-import { User } from '@/types';
 import { 
-  Users, UserPlus, Shield, Wrench, Trash2, X, 
-  Loader2, Search, ChevronLeft, Mail, Edit2, Check 
+  Users, UserPlus, Shield, Wrench, X, 
+  Loader2, Search, ChevronLeft, ChevronRight, Mail 
 } from 'lucide-react';
 import Navbar from '@/components/layout/Navbar';
 import { toast } from 'sonner';
@@ -18,8 +17,6 @@ const UsersManagement = () => {
   const [searchQuery, setSearchQuery] = useState('');
   const [roleFilter, setRoleFilter] = useState<'all' | 'admin' | 'mechanic'>('all');
   const [showAddModal, setShowAddModal] = useState(false);
-  const [editingUser, setEditingUser] = useState<User | null>(null);
-  const [deleteConfirm, setDeleteConfirm] = useState<string | null>(null);
 
   // New user form state
   const [newUser, setNewUser] = useState({ name: '', email: '', role: 'mechanic' as 'admin' | 'mechanic' });
@@ -59,30 +56,6 @@ const UsersManagement = () => {
       setNewUser({ name: '', email: '', role: 'mechanic' });
     },
     onError: (error: Error) => toast.error(error.message),
-  });
-
-  const updateRoleMutation = useMutation({
-    mutationFn: async ({ userId, role }: { userId: string; role: 'admin' | 'mechanic' }) => {
-      await UserModel.updateRole(userId, role);
-    },
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['users'] });
-      toast.success('Role updated');
-      setEditingUser(null);
-    },
-    onError: () => toast.error('Failed to update role'),
-  });
-
-  const deleteUserMutation = useMutation({
-    mutationFn: async (userId: string) => {
-      await UserModel.delete(userId);
-    },
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['users'] });
-      toast.success('User removed');
-      setDeleteConfirm(null);
-    },
-    onError: () => toast.error('Failed to remove user'),
   });
 
   const filteredUsers = users.filter(u => {
@@ -205,13 +178,27 @@ const UsersManagement = () => {
             {filteredUsers.map((u) => (
               <div
                 key={u.id}
-                className="card-elevated p-4 hover:shadow-md transition-shadow flex items-center justify-between gap-4"
+                className="card-elevated p-4 hover:shadow-md transition-shadow flex items-center justify-between gap-4 cursor-pointer group"
+                onClick={() => navigate(`/admin/users/${u.id}`)}
               >
                 <div className="flex items-center gap-4 flex-1 min-w-0">
-                  <div className={`w-10 h-10 rounded-full flex items-center justify-center ${
-                    u.role === 'admin' ? 'bg-blue-500/10 text-blue-500' : 'bg-green-500/10 text-green-500'
-                  }`}>
-                    {u.role === 'admin' ? <Shield className="w-5 h-5" /> : <Wrench className="w-5 h-5" />}
+                  <div className="relative shrink-0">
+                    <div className="w-10 h-10 rounded-full overflow-hidden border-2 border-border bg-muted">
+                      <img
+                        src={({
+                          '1': '/mechanic1.png', '2': '/mechanic2.png',
+                          '3': '/mechenic3.png', '4': '/mechenic4.png', '5': '/mechenic5.png',
+                        })[(u as any).avatarVariant ?? (u.role === 'admin' ? '2' : '1')] ?? '/mechanic1.png'}
+                        alt={u.name}
+                        className="w-full h-full object-cover object-top scale-110"
+                        draggable={false}
+                      />
+                    </div>
+                    <span className={`absolute -bottom-0.5 -right-0.5 w-4 h-4 rounded-full flex items-center justify-center border border-background ${
+                      u.role === 'admin' ? 'bg-blue-500' : 'bg-green-500'
+                    }`}>
+                      {u.role === 'admin' ? <Shield className="w-2.5 h-2.5 text-white" /> : <Wrench className="w-2.5 h-2.5 text-white" />}
+                    </span>
                   </div>
                   <div className="flex-1 min-w-0">
                     <p className="text-sm font-semibold text-foreground truncate">{u.name}</p>
@@ -226,52 +213,7 @@ const UsersManagement = () => {
                     {u.role}
                   </span>
                 </div>
-                <div className="flex items-center gap-2 shrink-0">
-                  {editingUser?.id === u.id ? (
-                    <div className="flex items-center gap-2">
-                      <select
-                        value={editingUser.role}
-                        onChange={(e) => setEditingUser({ ...editingUser, role: e.target.value as 'admin' | 'mechanic' })}
-                        className="px-3 py-1.5 rounded-lg border border-border bg-card text-sm"
-                      >
-                        <option value="mechanic">Mechanic</option>
-                        <option value="admin">Admin</option>
-                      </select>
-                      <button
-                        onClick={() => updateRoleMutation.mutate({ userId: u.id, role: editingUser.role })}
-                        disabled={updateRoleMutation.isPending}
-                        className="p-2 rounded-lg bg-green-500 text-white hover:bg-green-600 transition-colors"
-                      >
-                        <Check className="w-4 h-4" />
-                      </button>
-                      <button
-                        onClick={() => setEditingUser(null)}
-                        className="p-2 rounded-lg bg-muted text-muted-foreground hover:bg-muted/80 transition-colors"
-                      >
-                        <X className="w-4 h-4" />
-                      </button>
-                    </div>
-                  ) : (
-                    <>
-                      <button
-                        onClick={() => setEditingUser(u)}
-                        className="p-2 rounded-lg text-muted-foreground hover:bg-muted transition-colors"
-                        title="Edit role"
-                      >
-                        <Edit2 className="w-4 h-4" />
-                      </button>
-                      {u.id !== user?.id && (
-                        <button
-                          onClick={() => setDeleteConfirm(u.id)}
-                          className="p-2 rounded-lg text-red-500 hover:bg-red-500/10 transition-colors"
-                          title="Remove user"
-                        >
-                          <Trash2 className="w-4 h-4" />
-                        </button>
-                      )}
-                    </>
-                  )}
-                </div>
+                <ChevronRight className="w-4 h-4 text-muted-foreground/40 group-hover:text-muted-foreground transition-colors shrink-0" />
               </div>
             ))}
           </div>
@@ -352,42 +294,6 @@ const UsersManagement = () => {
         </div>
       )}
 
-      {/* Delete Confirmation Modal */}
-      {deleteConfirm && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-foreground/50 backdrop-blur-sm p-4" onClick={() => setDeleteConfirm(null)}>
-          <div 
-            className="w-full max-w-sm bg-card rounded-2xl border border-border p-6" 
-            style={{ boxShadow: 'var(--shadow-modal)' }} 
-            onClick={(e) => e.stopPropagation()}
-          >
-            <div className="text-center mb-6">
-              <div className="w-12 h-12 rounded-full bg-red-500/10 flex items-center justify-center mx-auto mb-4">
-                <Trash2 className="w-6 h-6 text-red-500" />
-              </div>
-              <h3 className="text-lg font-display font-bold text-foreground">Remove User?</h3>
-              <p className="text-sm text-muted-foreground mt-2">
-                This user will no longer be able to sign in. This action cannot be undone.
-              </p>
-            </div>
-            <div className="flex gap-3">
-              <button
-                onClick={() => setDeleteConfirm(null)}
-                className="flex-1 px-4 py-2.5 rounded-lg border border-border text-sm font-medium text-foreground hover:bg-muted transition-colors"
-              >
-                Cancel
-              </button>
-              <button
-                onClick={() => deleteUserMutation.mutate(deleteConfirm)}
-                disabled={deleteUserMutation.isPending}
-                className="flex-1 flex items-center justify-center gap-2 px-4 py-2.5 rounded-lg bg-red-500 text-white text-sm font-medium hover:bg-red-600 transition-colors disabled:opacity-60"
-              >
-                {deleteUserMutation.isPending ? <Loader2 className="w-4 h-4 animate-spin" /> : <Trash2 className="w-4 h-4" />}
-                Remove
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
     </div>
   );
 };

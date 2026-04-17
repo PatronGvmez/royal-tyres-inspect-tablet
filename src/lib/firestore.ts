@@ -5,10 +5,13 @@ import {
   getDoc,
   setDoc,
   updateDoc,
+  deleteDoc,
+  writeBatch,
   query,
   orderBy,
   where,
   serverTimestamp,
+  Timestamp,
 } from 'firebase/firestore';
 import { db } from './firebase';
 import { JobCard, InspectionReport, Inspection360, User } from '@/types';
@@ -28,6 +31,14 @@ export async function updateUserProfile(uid: string, data: Partial<Pick<User, 'n
   await updateDoc(doc(db, 'users', uid), data);
 }
 
+/** Admin-only: update any user's name, role, or avatarVariant */
+export async function updateUserByAdmin(
+  uid: string,
+  data: Partial<Pick<User, 'name' | 'role' | 'avatarVariant'>>
+): Promise<void> {
+  await updateDoc(doc(db, 'users', uid), data);
+}
+
 // ─── Job Cards ────────────────────────────────────────────────────────────────
 
 export async function fetchJobCards(): Promise<JobCard[]> {
@@ -42,6 +53,17 @@ export async function updateJobCardStatus(
   status: JobCard['status']
 ): Promise<void> {
   await updateDoc(doc(db, 'jobs', id), { status, updated_at: serverTimestamp() });
+}
+
+/**
+ * Mechanic acknowledges an unassigned job, claiming ownership.
+ * Stamps mechanic_id onto the job card.
+ */
+export async function acknowledgeJob(jobId: string, mechanicId: string): Promise<void> {
+  await updateDoc(doc(db, 'jobs', jobId), {
+    mechanic_id: mechanicId,
+    updated_at: serverTimestamp(),
+  });
 }
 
 export async function createJobCard(
@@ -59,6 +81,99 @@ export async function createJobCard(
 export async function fetchJobCardById(id: string): Promise<JobCard | null> {
   const snap = await getDoc(doc(db, 'jobs', id));
   return snap.exists() ? ({ ...snap.data(), id: snap.id } as JobCard) : null;
+}
+
+/**
+ * Fetch all job cards that belong to a specific mechanic.
+ * Intentionally avoids orderBy to prevent a composite-index requirement;
+ * results are sorted in JS by created_at descending.
+ */
+export async function fetchJobsByMechanic(mechanicId: string): Promise<JobCard[]> {
+  const snap = await getDocs(
+    query(collection(db, 'jobs'), where('mechanic_id', '==', mechanicId))
+  );
+  const jobs = snap.docs.map((d) => ({ ...d.data(), id: d.id } as JobCard));
+  // Sort descending by created_at (Firestore Timestamp or epoch ms)
+  return jobs.sort((a, b) => {
+    const toMs = (v: unknown) => {
+      if (!v) return 0;
+      if (typeof v === 'object' && v !== null && 'seconds' in v) return (v as { seconds: number }).seconds * 1000;
+      if (typeof v === 'number') return v;
+      return 0;
+    };
+    return toMs(b.created_at) - toMs(a.created_at);
+  });
+}
+
+/**
+ * Compute per-mechanic job stats directly from the `jobs` collection.
+ */
+export async function fetchMechanicStats(mechanicId: string) {
+  const jobs = await fetchJobsByMechanic(mechanicId);
+  return {
+    total_assigned: jobs.length,
+    completed:   jobs.filter((j) => j.status === 'completed').length,
+    in_progress: jobs.filter((j) => j.status === 'in_progress').length,
+    pending:     jobs.filter((j) => j.status === 'booked').length,
+    jobs,
+  };
+}
+
+const SA_SEED_JOBS: Array<{
+  customer_name: string; license_plate: string; status: JobCard['status'];
+  service_details: string; vehicle_type: string;
+  make: string; model: string; year: number; daysAgo: number;
+}> = [
+  { customer_name: 'Sipho Dlamini',      license_plate: 'CA 452-890',  status: 'booked', service_details: '4x Tyres & Wheel Alignment',            vehicle_type: 'sedan',    make: 'Toyota',        model: 'Corolla',  year: 2021, daysAgo: 0 },
+  { customer_name: 'Thandi Nkosi',       license_plate: 'GP 128-TNK',  status: 'booked', service_details: 'Front Brake Pads & Disc Replacement',   vehicle_type: 'hatchback',make: 'VW',            model: 'Polo',     year: 2020, daysAgo: 1 },
+  { customer_name: 'Bongani Zulu',       license_plate: 'WC 331-BZL',  status: 'booked', service_details: '2x Rear Tyres & Balancing',              vehicle_type: 'suv',      make: 'Ford',          model: 'Everest',  year: 2019, daysAgo: 2 },
+  { customer_name: 'Ayanda Khumalo',     license_plate: 'KZN 744-AYK', status: 'booked', service_details: 'Suspension Check & 4x All-Terrain Tyres',vehicle_type: 'bakkie',   make: 'Toyota',        model: 'Hilux',    year: 2022, daysAgo: 3 },
+  { customer_name: 'Lerato Molefe',      license_plate: 'EC 901-LRM',  status: 'booked', service_details: 'Full Service & 4x Truck Tyres',           vehicle_type: 'truck',    make: 'Hino',          model: '300',      year: 2018, daysAgo: 4 },
+  { customer_name: 'Pieter van der Berg',license_plate: 'NW 987-PVB',  status: 'booked', service_details: '2x Front Tyres & Alignment',             vehicle_type: 'sedan',    make: 'BMW',           model: '3 Series', year: 2020, daysAgo: 5 },
+  { customer_name: 'Fatima Davids',      license_plate: 'WC 147-FTD',  status: 'booked', service_details: 'Tyre Rotation & Nitrogen Fill',           vehicle_type: 'hatchback',make: 'Hyundai',       model: 'i20',      year: 2021, daysAgo: 6 },
+  { customer_name: 'Ravi Naidoo',        license_plate: 'KZN 258-RVN', status: 'booked', service_details: 'Shock Absorbers & 4x Run-Flat Tyres',    vehicle_type: 'suv',      make: 'Nissan',        model: 'X-Trail',  year: 2023, daysAgo: 7 },
+  { customer_name: 'Zanele Mokoena',     license_plate: 'GP 369-ZNM',  status: 'booked', service_details: 'Wheel Alignment & Balancing',            vehicle_type: 'bakkie',   make: 'Isuzu',         model: 'D-Max',    year: 2021, daysAgo: 8 },
+  { customer_name: 'Kobus du Plessis',   license_plate: 'FS 741-KDP',  status: 'booked', service_details: '4x Tyres & Balancing',                   vehicle_type: 'sedan',    make: 'Mercedes-Benz', model: 'C220',     year: 2019, daysAgo: 9 },
+];
+
+/**
+ * Deletes ALL jobs in Firestore and re-seeds 10 realistic SA jobs,
+ * distributing them evenly across all mechanics found in the `users` collection.
+ */
+export async function clearAndReseedJobs(): Promise<void> {
+  const DAY_MS = 86_400_000;
+  const now = Date.now();
+
+  // 1. Delete existing jobs in a batch
+  const existingSnap = await getDocs(collection(db, 'jobs'));
+  if (existingSnap.docs.length > 0) {
+    const delBatch = writeBatch(db);
+    existingSnap.docs.forEach((d) => delBatch.delete(d.ref));
+    await delBatch.commit();
+  }
+
+  // 2. Seed 10 new unassigned jobs
+  const seedBatch = writeBatch(db);
+  SA_SEED_JOBS.forEach((s, i) => {
+    const createdAt = now - s.daysAgo * DAY_MS;
+    const id = `JC-${createdAt - i}`;
+    const ref = doc(db, 'jobs', id);
+    // Seed jobs are intentionally unassigned — mechanics acknowledge to claim them
+    seedBatch.set(ref, {
+      id,
+      vehicle_id: `V-${createdAt - i}`,
+      customer_name: s.customer_name,
+      license_plate: s.license_plate,
+      vehicle_type: s.vehicle_type,
+      service_details: s.service_details,
+      status: s.status,
+      make: s.make,
+      model: s.model,
+      year: s.year,
+      created_at: Timestamp.fromMillis(createdAt),
+    });
+  });
+  await seedBatch.commit();
 }
 
 /**
