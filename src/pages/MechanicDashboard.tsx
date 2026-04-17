@@ -246,8 +246,14 @@ const MechanicDashboard = () => {
     j.id.toLowerCase().includes(searchLower) ||
     j.service_details.toLowerCase().includes(searchLower);
 
-  // Jobs with no mechanic assigned — the available pool any mechanic can claim
-  const availableJobs = allJobs.filter(j => !j.mechanic_id && j.status === 'booked' && matchesSearch(j));
+  // Booked + unclaimed — any mechanic can claim these
+  const unclaimedJobs = allJobs.filter(j =>
+    j.status === 'booked' && !j.mechanic_id && matchesSearch(j)
+  );
+  // Show the incoming section only when there are unclaimed booked jobs
+  const showAvailableSection =
+    unclaimedJobs.length > 0 &&
+    (statusFilter === 'all' || statusFilter === 'booked');
 
   // This mechanic's own jobs
   const myJobs = allJobs.filter(j => j.mechanic_id === user?.id);
@@ -263,7 +269,7 @@ const MechanicDashboard = () => {
   );
   const inProgressCount = myJobs.filter(j => j.status === 'in_progress').length;
   const bookedCount = myJobs.filter(j => j.status === 'booked').length;
-  const hasNoResults = searchQuery.trim() !== '' && availableJobs.length === 0 && activeJobs.length === 0 && completedJobs.length === 0;
+  const hasNoResults = searchQuery.trim() !== '' && unclaimedJobs.length === 0 && activeJobs.length === 0 && completedJobs.length === 0;
 
   return (
     <div className="min-h-screen bg-background pb-16">
@@ -355,8 +361,8 @@ const MechanicDashboard = () => {
                     <p className="text-xs text-foreground">
                       {activeJobs.length > 0
                         ? <><span className="font-bold text-primary">{activeJobs.length}</span> job{activeJobs.length !== 1 ? 's' : ''} in your queue</>
-                        : availableJobs.length > 0
-                          ? <><span className="font-bold text-primary">{availableJobs.length}</span> job{availableJobs.length !== 1 ? 's' : ''} available to claim</>
+                        : (unclaimedJobs.length + takenJobs.length) > 0
+                          ? <><span className="font-bold text-primary">{unclaimedJobs.length + takenJobs.length}</span> booked job{(unclaimedJobs.length + takenJobs.length) !== 1 ? 's' : ''} incoming</>
                           : <span className="text-muted-foreground">All clear — no active jobs</span>}
                     </p>
                   </div>
@@ -434,17 +440,31 @@ const MechanicDashboard = () => {
 
                 {/* Status filter pills */}
                 <div className="flex items-center gap-2 flex-wrap">
-                  {(['all', 'booked', 'in_progress', 'completed'] as const).map(s => (
+                  {(
+                    [
+                      { key: 'all',         label: 'All Jobs',    count: allJobs.length },
+                      { key: 'booked',      label: 'Booked',      count: allJobs.filter(j => j.status === 'booked').length },
+                      { key: 'in_progress', label: 'In Progress', count: allJobs.filter(j => j.status === 'in_progress').length },
+                      { key: 'completed',   label: 'Completed',   count: allJobs.filter(j => j.status === 'completed').length },
+                    ] as const
+                  ).map(({ key, label, count }) => (
                     <button
-                      key={s}
-                      onClick={() => setStatusFilter(s)}
-                      className={`px-3 py-1.5 rounded-full text-xs font-semibold transition-all ${
-                        statusFilter === s
+                      key={key}
+                      onClick={() => setStatusFilter(key)}
+                      className={`flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs font-semibold transition-all ${
+                        statusFilter === key
                           ? 'bg-primary text-primary-foreground shadow-sm'
                           : 'bg-muted text-muted-foreground hover:bg-muted/70'
                       }`}
                     >
-                      {s === 'all' ? 'All Jobs' : statusLabel[s]}
+                      {label}
+                      {count > 0 && (
+                        <span className={`text-[10px] font-bold px-1.5 py-0.5 rounded-full ${
+                          statusFilter === key
+                            ? 'bg-white/20 text-primary-foreground'
+                            : 'bg-background text-foreground'
+                        }`}>{count}</span>
+                      )}
                     </button>
                   ))}
                   {(searchQuery || statusFilter !== 'all') && (
@@ -473,70 +493,81 @@ const MechanicDashboard = () => {
                 </div>
               )}
 
-              {/* Available (unassigned) jobs — pool to claim */}
-              {availableJobs.length > 0 && (
+              {/* ── Incoming Booked Jobs — visible to all mechanics ── */}
+              {showAvailableSection && (
                 <section>
-                  <div className="flex items-center gap-2 mb-3">
-                    <div className="flex items-center gap-2 flex-1">
-                      <span className="flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-primary/10 border border-primary/20 text-primary text-[11px] font-bold uppercase tracking-wide">
-                        <UserCheck className="w-3 h-3" /> Available
-                      </span>
-                      <span className="text-[10px] text-muted-foreground">{availableJobs.length} job{availableJobs.length !== 1 ? 's' : ''} waiting to be claimed</span>
-                    </div>
+                  {/* Section header */}
+                  <div className="flex items-center justify-between mb-4">
+                    <h2 className="text-xs font-semibold uppercase tracking-widest text-muted-foreground">Incoming Jobs</h2>
+                    <span className="px-2.5 py-1 rounded-full bg-success/10 text-success text-[10px] font-bold border border-success/20">
+                      {unclaimedJobs.length} open
+                    </span>
                   </div>
 
-                  <div className="space-y-2.5">
-                    {availableJobs.map(job => (
-                      <div
+                  <motion.div
+                    className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-2 gap-4 items-start"
+                    initial="hidden"
+                    animate="visible"
+                    variants={{ hidden: {}, visible: { transition: { staggerChildren: 0.07 } } }}
+                  >
+                    {/* Unclaimed — claimable */}
+                    {unclaimedJobs.map(job => (
+                      <motion.div
                         key={job.id}
-                        className="card-elevated overflow-hidden border-l-4 border-l-primary/60"
+                        variants={{ hidden: { opacity: 0, y: 20 }, visible: { opacity: 1, y: 0 } }}
+                        transition={{ duration: 0.3 }}
+                        className="card-elevated overflow-hidden group hover:shadow-lg transition-all"
                       >
-                        <div className="flex items-start gap-3 p-4">
-                          {/* Vehicle icon */}
-                          <div className="w-14 h-14 rounded-xl overflow-hidden shrink-0 border border-border bg-muted flex items-center justify-center" style={{ background: 'var(--vehicle-card-bg)' }}>
-                            {(() => {
-                              const type = (vehicleViewSVGs[job.vehicle_type as VehicleType] ? job.vehicle_type : 'sedan') as VehicleType;
-                              const SVGComp = vehicleViewSVGs[type].front;
-                              return <SVGComp className="w-full h-full p-1.5" style={{ color: 'hsl(var(--primary))' }} />;
-                            })()}
+                        {/* Image area */}
+                        <div className="relative h-32 overflow-hidden" style={{ background: 'var(--vehicle-card-bg)' }}>
+                          <div className="absolute inset-0 pointer-events-none" style={{ background: 'var(--vehicle-card-glow)' }} />
+                          <VehicleCardCarousel
+                            vehicleType={job.vehicle_type}
+                            photos={allPhotos[job.id]}
+                            licensePlate={job.license_plate}
+                          />
+                          {/* Open badge top-left */}
+                          <div className="absolute top-2 left-2">
+                            <span className="flex items-center gap-1 bg-success/90 text-white text-[9px] font-bold px-1.5 py-0.5 rounded-full backdrop-blur-sm">
+                              <CheckCircle2 className="w-2.5 h-2.5" /> Open
+                            </span>
                           </div>
-
-                          {/* Details */}
-                          <div className="flex-1 min-w-0">
-                            <div className="flex items-center justify-between gap-2 flex-wrap">
-                              <p className="text-sm font-bold text-foreground">{job.customer_name}</p>
-                              <span className="text-[10px] font-mono font-bold text-foreground bg-muted px-2 py-0.5 rounded tracking-widest border border-border shrink-0">{job.license_plate}</span>
-                            </div>
-                            {(job.make || job.model || job.year) && (
-                              <p className="text-[11px] text-muted-foreground mt-0.5">
-                                {[job.make, job.model, job.year].filter(Boolean).join(' · ')}
-                              </p>
-                            )}
-                            <p className="text-xs text-muted-foreground mt-1 line-clamp-2">{job.service_details}</p>
+                          {/* Job ID top-right */}
+                          <div className="absolute top-2 right-2">
+                            <span className="text-[9px] font-mono bg-black/40 text-white px-1.5 py-0.5 rounded-full backdrop-blur-sm">{job.id}</span>
                           </div>
                         </div>
 
-                        {/* Acknowledge CTA */}
-                        <div className="px-4 pb-4">
+                        {/* Info */}
+                        <div className="p-4">
+                          <div className="flex items-center justify-between gap-2 min-w-0">
+                            <p className="text-sm font-bold text-foreground truncate">{job.customer_name}</p>
+                            <span className="shrink-0 text-[10px] font-mono font-bold text-foreground bg-muted px-2 py-0.5 rounded tracking-widest border border-border">{job.license_plate}</span>
+                          </div>
+                          {(job.make || job.model || job.year) && (
+                            <div className="flex items-center gap-1.5 mt-1 flex-wrap">
+                              {job.make && <span className="text-[10px] font-semibold px-1.5 py-0.5 rounded bg-primary/10 text-primary">{job.make}</span>}
+                              {job.model && <span className="text-[10px] font-semibold px-1.5 py-0.5 rounded bg-secondary text-foreground">{job.model}</span>}
+                              {job.year && <span className="text-[10px] font-mono text-muted-foreground">{job.year}</span>}
+                            </div>
+                          )}
+                          <p className="text-xs text-muted-foreground mt-1.5 line-clamp-2 leading-relaxed">{job.service_details}</p>
+
+                          {/* Claim CTA */}
                           <button
-                            onClick={() => {
-                              if (acknowledgeJobMutation.isPending) return;
-                              acknowledgeJobMutation.mutate(job.id);
-                            }}
+                            onClick={() => { if (!acknowledgeJobMutation.isPending) acknowledgeJobMutation.mutate(job.id); }}
                             disabled={acknowledgeJobMutation.isPending}
-                            className="w-full flex items-center justify-center gap-2 px-4 py-2.5 rounded-xl bg-primary text-primary-foreground text-sm font-bold hover:opacity-90 active:scale-[.98] transition-all disabled:opacity-50"
+                            className="mt-3 w-full flex items-center justify-center gap-2 px-3 py-2 rounded-lg bg-primary text-primary-foreground text-xs font-bold hover:opacity-90 active:scale-[.98] transition-all disabled:opacity-50"
                           >
-                            {acknowledgeJobMutation.isPending ? (
-                              <Loader2 className="w-4 h-4 animate-spin" />
-                            ) : (
-                              <UserCheck className="w-4 h-4" />
-                            )}
-                            Acknowledge &amp; Claim Job
+                            {acknowledgeJobMutation.isPending ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <UserCheck className="w-3.5 h-3.5" />}
+                            Acknowledge &amp; Claim
                           </button>
                         </div>
-                      </div>
+                        {/* Coloured bottom border */}
+                        <div className="h-0.5 w-full bg-success/70" />
+                      </motion.div>
                     ))}
-                  </div>
+                  </motion.div>
 
                   {/* Divider before my jobs */}
                   {(activeJobs.length > 0 || completedJobs.length > 0) && (
@@ -694,8 +725,8 @@ const MechanicDashboard = () => {
                 </section>
               )}
 
-              {/* Empty state — only show when no available jobs AND no my jobs */}
-              {activeJobs.length === 0 && availableJobs.length === 0 && (
+              {/* Empty state — only show when nothing incoming and no my jobs */}
+              {activeJobs.length === 0 && !showAvailableSection && (
                 <div className="card-elevated p-14 text-center">
                   <div className="w-16 h-16 rounded-2xl bg-muted flex items-center justify-center mx-auto mb-4">
                     <CheckCircle2 className="w-8 h-8 text-muted-foreground opacity-40" />
