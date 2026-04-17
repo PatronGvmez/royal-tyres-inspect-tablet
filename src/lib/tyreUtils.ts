@@ -1,11 +1,9 @@
 import { TyreOverlay } from '@/components/inspection/CarDiagram';
 
 export const TYRE_CONDITIONS = [
-  { value: 'very_bad', label: 'Very Bad',                color: '#b91c1c', bg: '#fef2f2', border: '#fca5a5' },
-  { value: 'poor',     label: 'Poor',                    color: '#c2410c', bg: '#fff7ed', border: '#fdba74' },
-  { value: 'fair',     label: 'Fair / Worn',             color: '#b45309', bg: '#fffbeb', border: '#fcd34d' },
-  { value: 'good',     label: 'Good',                    color: '#15803d', bg: '#f0fdf4', border: '#86efac' },
-  { value: 'new',      label: 'New (Recently Replaced)', color: '#1d4ed8', bg: '#eff6ff', border: '#93c5fd' },
+  { value: 'very_bad', label: 'Very Bad',    color: '#b91c1c', bg: '#fef2f2', border: '#fca5a5' },
+  { value: 'fair',     label: 'Fair / Worn', color: '#b45309', bg: '#fffbeb', border: '#fcd34d' },
+  { value: 'good',     label: 'Good',        color: '#15803d', bg: '#f0fdf4', border: '#86efac' },
 ] as const;
 
 export type TyreConditionValue = typeof TYRE_CONDITIONS[number]['value'];

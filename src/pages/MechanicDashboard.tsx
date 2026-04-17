@@ -56,7 +56,7 @@ const getWorkflowSteps = (job: JobCard, hasPhotos: boolean) => [
   { label: 'Inspect', done: job.status === 'in_progress' || job.status === 'completed', active: hasPhotos && job.status === 'booked' || job.status === 'in_progress' },
 ];
 
-const VIEW_ANGLES: ViewAngle[] = ['front', 'rear', 'left', 'right', 'top'];
+const VIEW_ANGLES: ViewAngle[] = ['front', 'rear', 'left', 'right'];
 
 // Map vehicle_type → body style label shown in the Model dropdown
 const VEHICLE_TYPE_TO_BODY: Record<string, string> = {
@@ -66,6 +66,10 @@ const VEHICLE_TYPE_TO_BODY: Record<string, string> = {
   bakkie:   'Bakkie',
   truck:    'Truck',
 };
+// Reverse map: body style label → vehicle_type key
+const BODY_TO_VEHICLE_TYPE: Record<string, string> = Object.fromEntries(
+  Object.entries(VEHICLE_TYPE_TO_BODY).map(([k, v]) => [v, k])
+);
 const BODY_STYLE_OPTIONS = ['Sedan', 'Hatchback', 'SUV', 'Bakkie', 'Truck'];
 
 const vehicleTypeOptions = [
@@ -129,9 +133,7 @@ const MechanicDashboard = () => {
     license_plate: '',
     service_details: '',
     vehicle_type: 'sedan',
-    make: '',
     model: VEHICLE_TYPE_TO_BODY['sedan'],
-    year: '',
   });
 
   const { data: allJobs = [], isLoading, isError } = useQuery({
@@ -185,16 +187,14 @@ const MechanicDashboard = () => {
         service_details: data.service_details.trim(),
         status: 'booked',
         vehicle_type: data.vehicle_type,
-        make: data.make.trim() || undefined,
         model: data.model.trim() || undefined,
-        year: data.year ? Number(data.year) : undefined,
         mechanic_id: user?.id,
       }),
     onSuccess: (newJob) => {
       queryClient.invalidateQueries({ queryKey: ['jobs'] });
       toast.success('Job created! Capture vehicle photos next.');
       setShowAddModal(false);
-      setForm({ customer_name: '', license_plate: '', service_details: '', vehicle_type: 'sedan', make: '', model: VEHICLE_TYPE_TO_BODY['sedan'], year: '' });
+      setForm({ customer_name: '', license_plate: '', service_details: '', vehicle_type: 'sedan', model: VEHICLE_TYPE_TO_BODY['sedan'] });
       setPreviewIdx(0);
       navigate(`/mechanic/photo-upload/${newJob.id}`);
     },
@@ -361,8 +361,8 @@ const MechanicDashboard = () => {
                     <p className="text-xs text-foreground">
                       {activeJobs.length > 0
                         ? <><span className="font-bold text-primary">{activeJobs.length}</span> job{activeJobs.length !== 1 ? 's' : ''} in your queue</>
-                        : (unclaimedJobs.length + takenJobs.length) > 0
-                          ? <><span className="font-bold text-primary">{unclaimedJobs.length + takenJobs.length}</span> booked job{(unclaimedJobs.length + takenJobs.length) !== 1 ? 's' : ''} incoming</>
+                        : unclaimedJobs.length > 0
+                          ? <><span className="font-bold text-primary">{unclaimedJobs.length}</span> booked job{unclaimedJobs.length !== 1 ? 's' : ''} incoming</>
                           : <span className="text-muted-foreground">All clear — no active jobs</span>}
                     </p>
                   </div>
@@ -1109,41 +1109,22 @@ const MechanicDashboard = () => {
                 </div>
 
                 {/* Make / Model / Year — 3 columns */}
-                <div className="grid grid-cols-3 gap-2">
-                  <div>
-                    <label className="text-xs font-semibold text-foreground mb-1.5 block">Make</label>
-                    <input
-                      type="text"
-                      value={form.make}
-                      onChange={e => setForm(f => ({ ...f, make: e.target.value }))}
-                      placeholder="Toyota"
-                      className={inputCls}
-                    />
-                  </div>
-                  <div>
-                    <label className="text-xs font-semibold text-foreground mb-1.5 block">Body Style</label>
-                    <select
-                      value={form.model}
-                      onChange={e => setForm(f => ({ ...f, model: e.target.value }))}
-                      className={inputCls}
-                    >
-                      {BODY_STYLE_OPTIONS.map(opt => (
-                        <option key={opt} value={opt}>{opt}</option>
-                      ))}
-                    </select>
-                  </div>
-                  <div>
-                    <label className="text-xs font-semibold text-foreground mb-1.5 block">Year</label>
-                    <input
-                      type="number"
-                      value={form.year}
-                      onChange={e => setForm(f => ({ ...f, year: e.target.value }))}
-                      placeholder="2022"
-                      min={1980}
-                      max={new Date().getFullYear() + 1}
-                      className={inputCls}
-                    />
-                  </div>
+                <div>
+                  <label className="text-xs font-semibold text-foreground mb-1.5 block">Body Style</label>
+                  <select
+                    value={form.model}
+                    onChange={e => {
+                      const label = e.target.value;
+                      const vType = BODY_TO_VEHICLE_TYPE[label] ?? 'sedan';
+                      setForm(f => ({ ...f, model: label, vehicle_type: vType }));
+                      setPreviewIdx(0);
+                    }}
+                    className={inputCls}
+                  >
+                    {BODY_STYLE_OPTIONS.map(opt => (
+                      <option key={opt} value={opt}>{opt}</option>
+                    ))}
+                  </select>
                 </div>
 
                 {/* Service Details */}
@@ -1168,10 +1149,8 @@ const MechanicDashboard = () => {
                     <div className="flex-1 min-w-0">
                       <p className="text-xs text-muted-foreground">Registering</p>
                       <p className="text-sm font-semibold text-foreground">{form.customer_name || '—'}</p>
-                      {(form.make || form.model || form.year) && (
-                        <p className="text-[11px] text-muted-foreground mt-0.5">
-                          {[form.make, form.model, form.year].filter(Boolean).join(' ')}
-                        </p>
+                      {form.model && (
+                        <p className="text-[11px] text-muted-foreground mt-0.5">{form.model}</p>
                       )}
                     </div>
                     <span className="text-xs font-mono font-bold bg-foreground text-background px-2.5 py-1 rounded-lg tracking-widest">

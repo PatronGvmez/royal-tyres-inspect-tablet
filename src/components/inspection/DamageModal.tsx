@@ -8,6 +8,7 @@ interface DamageModalProps {
   onSubmit: (damage: Omit<VehicleDamage, 'coordinates'>) => void;
   onClose: () => void;
   view?: string;
+  initialValues?: Pick<VehicleDamage, 'part' | 'damage_type' | 'severity'>;
 }
 
 const partsByView: Record<ViewAngle, string[]> = {
@@ -66,14 +67,15 @@ const allParts = [
   'Front Left Wheel', 'Front Right Wheel', 'Rear Left Wheel', 'Rear Right Wheel',
 ];
 
-const DamageModal: React.FC<DamageModalProps> = ({ onSubmit, onClose, view }) => {
+const DamageModal: React.FC<DamageModalProps> = ({ onSubmit, onClose, view, initialValues }) => {
+  const isEdit = !!initialValues;
   const isValidView = (v: string | undefined): v is ViewAngle =>
     !!v && v in partsByView;
 
   const activeParts = isValidView(view) ? partsByView[view] : allParts;
-  const [part, setPart] = useState(activeParts[0]);
-  const [damageType, setDamageType] = useState<VehicleDamage['damage_type']>('scratch');
-  const [severity, setSeverity] = useState<VehicleDamage['severity']>('minor');
+  const [part, setPart] = useState(initialValues?.part ?? activeParts[0]);
+  const [damageType, setDamageType] = useState<VehicleDamage['damage_type']>(initialValues?.damage_type ?? 'scratch');
+  const [severity, setSeverity] = useState<VehicleDamage['severity']>(initialValues?.severity ?? 'minor');
 
   const handleSubmit = () => {
     onSubmit({ part, damage_type: damageType, severity });
@@ -84,7 +86,7 @@ const DamageModal: React.FC<DamageModalProps> = ({ onSubmit, onClose, view }) =>
       <div className="w-full max-w-md bg-card rounded-2xl border border-border p-5 space-y-4" style={{ boxShadow: 'var(--shadow-modal)' }} onClick={e => e.stopPropagation()}>
         <div className="flex items-center justify-between">
           <div>
-            <h3 className="text-base font-display font-bold text-foreground">Log Damage</h3>
+            <h3 className="text-base font-display font-bold text-foreground">{isEdit ? 'Edit Damage' : 'Log Damage'}</h3>
             {isValidView(view) && (
               <span className="text-[11px] text-primary font-medium">{viewLabel[view]} — showing relevant parts</span>
             )}
@@ -142,7 +144,7 @@ const DamageModal: React.FC<DamageModalProps> = ({ onSubmit, onClose, view }) =>
         </div>
 
         <button onClick={handleSubmit} className="w-full px-4 py-3 rounded-xl bg-primary text-primary-foreground font-semibold text-sm hover:opacity-90 transition-opacity">
-          Add Damage
+          {isEdit ? 'Save Changes' : 'Add Damage'}
         </button>
       </div>
     </div>

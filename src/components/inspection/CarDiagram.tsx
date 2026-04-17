@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect, useRef, useCallback } from 'react';
 import { VehicleDamage } from '@/types';
 import { vehicleViewSVGs, vehicleLabels, viewLabels, VehicleType, ViewAngle } from './VehicleSVGs';
 import { Car, RotateCcw, Camera } from 'lucide-react';
@@ -16,6 +16,8 @@ interface CarDiagramProps {
   damages: VehicleDamage[];
   onAreaClick: (x: number, y: number, view: string) => void;
   onRemoveDamage?: (idx: number) => void;
+  onDamageMove?: (idx: number, x: number, y: number) => void;
+  onEditDamage?: (idx: number) => void;
   vehicleType?: VehicleType;
   onVehicleTypeChange?: (type: VehicleType) => void;
   photos?: Partial<Record<ViewAngle, string>>;
@@ -24,13 +26,15 @@ interface CarDiagramProps {
 }
 
 const vehicleTypes: VehicleType[] = ['sedan', 'hatchback', 'suv', 'bakkie', 'truck'];
-const viewAngles: ViewAngle[] = ['front', 'rear', 'left', 'right', 'top'];
+const viewAngles: ViewAngle[] = ['front', 'rear', 'left', 'right'];
 
-const CarDiagram: React.FC<CarDiagramProps> = ({ damages, onAreaClick, onRemoveDamage, vehicleType = 'sedan', onVehicleTypeChange, photos, tyreOverlays, onTyrePositionChange }) => {
+const CarDiagram: React.FC<CarDiagramProps> = ({ damages, onAreaClick, onRemoveDamage, onDamageMove, onEditDamage, vehicleType = 'sedan', onVehicleTypeChange, photos, tyreOverlays, onTyrePositionChange }) => {
   const normalizedVehicleType = (vehicleType?.toLowerCase() as VehicleType) || 'sedan';
   const [selectedType, setSelectedType] = useState<VehicleType>(normalizedVehicleType);
   const [activeView, setActiveView] = useState<ViewAngle>('front');
   const [dragging, setDragging] = useState<string | null>(null);
+  const [draggingDamage, setDraggingDamage] = useState<number | null>(null);
+  const damageDragMoved = useRef(false);
   const diagramRef = useRef<HTMLDivElement>(null);
 
   // Sync when parent updates vehicleType (e.g. after job card loads)
@@ -93,11 +97,11 @@ const CarDiagram: React.FC<CarDiagramProps> = ({ damages, onAreaClick, onRemoveD
         className="relative w-full rounded-lg overflow-hidden border border-border bg-card cursor-crosshair select-none"
         onClick={handleClick}
         onTouchStart={(e) => {
-          // Don't open damage modal when touching a tyre overlay dot
-          if ((e.target as HTMLElement).closest('[data-tyre-overlay]')) return;
+          // Don't open damage modal when touching a tyre overlay or damage pin
+          if ((e.target as HTMLElement).closest('[data-tyre-overlay],[data-damage-pin]')) return;
           handleTouch(e);
         }}
-        style={{ height: activeView === 'top' ? 320 : 260 }}
+        style={{ height: 260 }}
       >
         {/* Photo OR SVG — mutually exclusive. Photo hides the default model entirely. */}
         {photos?.[activeView] ? (
@@ -175,24 +179,25 @@ const CarDiagram: React.FC<CarDiagramProps> = ({ damages, onAreaClick, onRemoveD
           );
         })}
 
-        {/* Damage pins — same label+dot style as tyre overlays */}
+        {/* Damage pins — label=edit, dot=drag, ×=remove */}
         {viewDamages.map((d) => {
           const globalIdx = damages.indexOf(d);
+          const isDraggingThis = draggingDamage === globalIdx;
           const isMinor = d.severity === 'minor';
           const pinColor = isMinor ? 'hsl(var(--warning))' : 'hsl(var(--accent))';
-          // Abbreviate compound location prefixes so labels stay compact
           const shortPart = d.part
             .replace('Front Left', 'FL').replace('Front Right', 'FR')
             .replace('Rear Left', 'RL').replace('Rear Right', 'RR');
           return (
             <div
               key={globalIdx}
-              className="absolute z-20"
+              data-damage-pin="true"
+              className="absolute z-20 pointer-events-none"
               style={{ left: `${d.coordinates.x}%`, top: `${d.coordinates.y}%` }}
             >
-              {/* Pill label above the dot */}
+              {/* ── Label pill: click to edit ── */}
               <div
-                className="absolute z-30 rounded shadow-md select-none text-center"
+                className="absolute z-30 rounded shadow-md select-none text-center pointer-events-auto cursor-pointer hover:brightness-110 active:brightness-95 transition-all"
                 style={{
                   background: pinColor,
                   color: '#fff',
@@ -203,25 +208,51 @@ const CarDiagram: React.FC<CarDiagramProps> = ({ damages, onAreaClick, onRemoveD
                   padding: '2px 6px',
                   whiteSpace: 'nowrap',
                 }}
+                onClick={(e) => { e.stopPropagation(); onEditDamage?.(globalIdx); }}
               >
                 <div className="text-[8px] font-bold leading-tight">{shortPart}</div>
                 <div className="text-[7px] opacity-80 capitalize leading-tight">
                   {d.damage_type} · {d.severity}
                 </div>
+                {/* ── × remove button inside pill ── */}
                 {onRemoveDamage && (
                   <button
                     className="absolute -top-1.5 -right-1.5 w-3.5 h-3.5 rounded-full bg-black/50 text-white flex items-center justify-center text-[9px] font-bold hover:bg-black/80 leading-none"
+                    onPointerDown={(e) => e.stopPropagation()}
                     onClick={(e) => { e.stopPropagation(); onRemoveDamage(globalIdx); }}
                     title="Remove damage"
                   >×</button>
                 )}
               </div>
-              {/* Dot centred on the coordinate */}
+              {/* ── Dot: drag handle only ── */}
               <div
-                className="w-6 h-6 rounded-full border-2 border-white shadow-lg flex items-center justify-center cursor-pointer hover:scale-110 transition-transform"
-                style={{ background: pinColor, transform: 'translate(-50%, -50%)' }}
-                onClick={(e) => { e.stopPropagation(); onRemoveDamage?.(globalIdx); }}
-                title={`${d.part}: ${d.damage_type} (${d.severity}) — click to remove`}
+                className="w-6 h-6 rounded-full border-2 border-white shadow-lg flex items-center justify-center pointer-events-auto transition-transform duration-100"
+                style={{
+                  background: pinColor,
+                  transform: `translate(-50%, -50%) scale(${isDraggingThis ? 1.35 : 1})`,
+                  cursor: isDraggingThis ? 'grabbing' : 'grab',
+                }}
+                onPointerDown={(e) => {
+                  e.preventDefault();
+                  e.stopPropagation();
+                  e.currentTarget.setPointerCapture(e.pointerId);
+                  setDraggingDamage(globalIdx);
+                  damageDragMoved.current = false;
+                }}
+                onPointerMove={(e) => {
+                  if (draggingDamage !== globalIdx || !diagramRef.current || !onDamageMove) return;
+                  damageDragMoved.current = true;
+                  const rect = diagramRef.current.getBoundingClientRect();
+                  const x = Math.max(2, Math.min(98, ((e.clientX - rect.left) / rect.width) * 100));
+                  const y = Math.max(2, Math.min(98, ((e.clientY - rect.top) / rect.height) * 100));
+                  onDamageMove(globalIdx, x, y);
+                }}
+                onPointerUp={(e) => {
+                  e.stopPropagation();
+                  setDraggingDamage(null);
+                  damageDragMoved.current = false;
+                }}
+                onClick={(e) => e.stopPropagation()}
               >
                 <div className="w-2.5 h-2.5 rounded-full border border-white/70" />
               </div>

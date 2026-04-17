@@ -4,6 +4,13 @@
 @tailwind components;
 @tailwind utilities;
 
+/* ─── Responsive base font scaling ───
+   All rem-based Tailwind sizes (text, spacing, heights) shrink proportionally.
+   Mobile stays at 16px; tablet/desktop feel tighter and less zoomed. */
+html { font-size: 16px; }
+@media (min-width: 768px)  { html { font-size: 14.5px; } }
+@media (min-width: 1024px) { html { font-size: 14px;   } }
+
 @layer base {
   :root {
     --background: 220 14% 94%;

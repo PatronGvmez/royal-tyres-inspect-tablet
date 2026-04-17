@@ -118,7 +118,6 @@ const ANGLES: { key: ViewAngle; label: string }[] = [
   { key: 'rear',  label: 'Rear'  },
   { key: 'left',  label: 'Left Side' },
   { key: 'right', label: 'Right Side' },
-  { key: 'top',   label: 'Top / Roof' },
 ];
 
 interface UploaderProps {

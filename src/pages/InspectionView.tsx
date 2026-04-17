@@ -4,8 +4,9 @@ import { useQueryClient, useQuery } from '@tanstack/react-query';
 import SignatureCanvas from 'react-signature-canvas';
 import { mockJobCards } from '@/data/mock';
 import { VehicleDamage, InspectionReport } from '@/types';
-import { ArrowLeft, Check, Trash2, Box, Loader2, Sun, Moon, AlertCircle } from 'lucide-react';
+import { ArrowLeft, Check, Trash2, Box, Loader2, Sun, Moon, AlertCircle, Clock } from 'lucide-react';
 import { useTheme } from '@/hooks/use-theme';
+import { useAuth } from '@/context/AuthContext';
 import CarDiagram, { TyreOverlay } from '@/components/inspection/CarDiagram';
 import { TYRE_CONDITIONS, TYRE_POSITIONS, TYRE_WHEEL_COORDS } from '@/lib/tyreUtils';
 import Vehicle3DModel from '@/components/vehicle-3d/Vehicle3DModelWrapper';
@@ -15,13 +16,17 @@ import { toast } from 'sonner';
 import { saveInspectionReport, updateJobCardStatus, fetchJobCardById, fetchJobPhotos, acknowledgeNudgesForJob } from '@/lib/firestore';
 import { vehicleViewSVGs, VehicleType } from '@/components/inspection/VehicleSVGs';
 
-const fuelLevels = ['Empty', '1/4', '1/2', '3/4', 'Full'];
+const formatDateTime = (iso: string) => {
+  const d = new Date(iso);
+  return d.toLocaleString('en-ZA', { day: '2-digit', month: 'short', year: 'numeric', hour: '2-digit', minute: '2-digit' });
+};
 
 const InspectionView = () => {
   const { id } = useParams<{ id: string }>();
   const navigate = useNavigate();
   const queryClient = useQueryClient();
   const location = useLocation();
+  const { user } = useAuth();
   const { data: job, isLoading: jobLoading } = useQuery({
     queryKey: ['job', id],
     queryFn: async () => {
@@ -40,11 +45,19 @@ const InspectionView = () => {
     staleTime: Infinity,
     enabled: !!id,
   });
-  const sigCanvas = useRef<SignatureCanvas>(null);
+  const mechanicSigCanvas = useRef<SignatureCanvas>(null);
+  const customerSigCanvas = useRef<SignatureCanvas>(null);
+
+  // Signature timestamps — set onEnd so we capture exactly when they signed
+  const [mechanicSignedAt, setMechanicSignedAt] = useState<string | null>(null);
+  const [customerSignedAt, setCustomerSignedAt] = useState<string | null>(null);
+  // Show/hide the timestamp badge per signer
+  const [showMechanicTime, setShowMechanicTime] = useState(false);
+  const [showCustomerTime, setShowCustomerTime] = useState(false);
+  // Customer name for the customer signature block
+  const [customerName, setCustomerName] = useState('');
 
   // Traditional inspection state
-  const [odometer, setOdometer] = useState<number>(0);
-  const [fuelLevel, setFuelLevel] = useState('1/2');
   const [tires, setTires] = useState({
     front_left: '',
     front_right: '',
@@ -53,10 +66,11 @@ const InspectionView = () => {
   });
   const [damages, setDamages] = useState<VehicleDamage[]>([]);
   const [showDamageModal, setShowDamageModal] = useState(false);
+  const [editingDamageIdx, setEditingDamageIdx] = useState<number | null>(null);
   const [clickCoords, setClickCoords] = useState<{ x: number; y: number } | null>(null);
   const [use3D, setUse3D] = useState(false);
   const [vehicleType, setVehicleType] = useState<'sedan' | 'hatchback' | 'suv' | 'bakkie' | 'truck'>('sedan');
-  const [clickView, setClickView] = useState<string>('top');
+  const [clickView, setClickView] = useState<string>('front');
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [viewPhotos, setViewPhotos] = useState<Partial<Record<string, string>>>({});
   const [tyreErrors, setTyreErrors] = useState<Record<string, boolean>>({});
@@ -131,6 +145,22 @@ const InspectionView = () => {
     }));
   }, []);
 
+  const handleDamageMove = useCallback((idx: number, x: number, y: number) => {
+    setDamages(prev => prev.map((d, i) => i === idx ? { ...d, coordinates: { x, y } } : d));
+  }, []);
+
+  const handleEditDamage = useCallback((idx: number) => {
+    setEditingDamageIdx(idx);
+  }, []);
+
+  const handleUpdateDamage = (update: Omit<VehicleDamage, 'coordinates' | 'view'>) => {
+    if (editingDamageIdx === null) return;
+    setDamages(prev => prev.map((d, i) =>
+      i === editingDamageIdx ? { ...d, ...update } : d
+    ));
+    setEditingDamageIdx(null);
+  };
+
   const handleDiagramClick = useCallback((x: number, y: number, view: string) => {
     setClickCoords({ x, y });
     setClickView(view);
@@ -164,16 +194,23 @@ const InspectionView = () => {
     setTyreErrors({});
 
     setIsSubmitting(true);
-    const signatureData = sigCanvas.current?.toDataURL();
+    const now = new Date().toISOString();
+    const mechanicSig = mechanicSigCanvas.current?.isEmpty() ? undefined : mechanicSigCanvas.current?.toDataURL();
+    const customerSig = customerSigCanvas.current?.isEmpty() ? undefined : customerSigCanvas.current?.toDataURL();
     const report: InspectionReport = {
       id: `IR-${Date.now()}`,
       job_card_id: id!,
       inspection_type: 'pre_service',
-      odometer,
-      fuel_level: fuelLevel,
       tire_conditions: tires,
       damages,
-      signature_url: signatureData,
+      mechanic_name: user?.name,
+      mechanic_signature_url: mechanicSig,
+      mechanic_signed_at: mechanicSig ? (mechanicSignedAt ?? now) : undefined,
+      customer_name: customerName || undefined,
+      customer_signature_url: customerSig,
+      customer_signed_at: customerSig ? (customerSignedAt ?? now) : undefined,
+      // legacy field — keep for backward compat with existing reports
+      signature_url: customerSig,
     };
 
     try {
@@ -215,7 +252,7 @@ const InspectionView = () => {
     <div className="min-h-screen bg-background pb-10">
       {/* ── Sticky Header ── */}
       <header className="sticky top-0 z-30 bg-card border-b border-border">
-        <div className="max-w-5xl mx-auto px-4 sm:px-6 py-3 flex items-center gap-3">
+        <div className="max-w-6xl mx-auto px-4 sm:px-6 py-3 flex items-center gap-3">
           <button
             onClick={() => navigate('/mechanic')}
             className="p-2 -ml-2 rounded-lg text-muted-foreground hover:bg-muted transition-colors"
@@ -237,7 +274,7 @@ const InspectionView = () => {
         </div>
       </header>
 
-      <div className="max-w-5xl mx-auto px-4 sm:px-6 space-y-5 mt-5">
+      <div className="max-w-6xl mx-auto px-4 sm:px-6 space-y-5 mt-5">
 
         {/* ── Job Context Card ── */}
         <div className="card-elevated overflow-hidden">
@@ -295,32 +332,7 @@ const InspectionView = () => {
           <div className="h-0.5 w-full bg-primary" />
         </div>
 
-        {/* ── Vehicle Status ── */}
-        <section className="card-elevated p-4 sm:p-5">
-          <h2 className="text-xs font-semibold uppercase tracking-widest text-muted-foreground mb-4">Vehicle Status</h2>
-          <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
-            <div className="sm:col-span-2">
-              <label className="text-xs text-muted-foreground mb-1.5 block">Odometer (km)</label>
-              <input
-                type="number"
-                value={odometer || ''}
-                onChange={e => setOdometer(Number(e.target.value))}
-                placeholder="e.g. 87432"
-                className={inputCls}
-              />
-            </div>
-            <div className="sm:col-span-2">
-              <label className="text-xs text-muted-foreground mb-1.5 block">Fuel Level</label>
-              <select
-                value={fuelLevel}
-                onChange={e => setFuelLevel(e.target.value)}
-                className={inputCls}
-              >
-                {fuelLevels.map(f => <option key={f} value={f}>{f}</option>)}
-              </select>
-            </div>
-          </div>
-        </section>
+
 
         {/* ── Tyre & Alloy Condition ── */}
         <section className="card-elevated p-4 sm:p-5">
@@ -420,6 +432,8 @@ const InspectionView = () => {
                 damages={damages}
                 onAreaClick={handleDiagramClick}
                 onRemoveDamage={handleRemoveDamage}
+                onDamageMove={handleDamageMove}
+                onEditDamage={handleEditDamage}
                 vehicleType={vehicleType}
                 onVehicleTypeChange={setVehicleType}
                 photos={mergedPhotos as any}
@@ -451,30 +465,100 @@ const InspectionView = () => {
           </div>
         </section>
 
-        {/* ── Customer Signature ── */}
+        {/* ── Inspector Signature ── */}
         <section className="card-elevated overflow-hidden">
-          <div className="px-4 sm:px-5 pt-4 sm:pt-5 pb-3 flex items-center justify-between">
-            <h2 className="text-xs font-semibold uppercase tracking-widest text-muted-foreground">Customer Signature</h2>
-            <button
-              onClick={() => sigCanvas.current?.clear()}
-              className="text-xs font-medium text-muted-foreground hover:text-foreground transition-colors"
-            >
-              Clear
-            </button>
+          <div className="px-4 sm:px-5 pt-4 sm:pt-5 pb-3">
+            <div className="flex items-center justify-between mb-3">
+              <div>
+                <h2 className="text-xs font-semibold uppercase tracking-widest text-muted-foreground">Inspector Signature</h2>
+                <p className="text-sm font-medium text-foreground mt-0.5">{user?.name ?? 'Mechanic'}</p>
+              </div>
+              <div className="flex items-center gap-2">
+                {mechanicSignedAt && (
+                  <button
+                    type="button"
+                    onClick={() => setShowMechanicTime(v => !v)}
+                    className={`flex items-center gap-1 px-2 py-1 rounded-md text-[11px] font-medium border transition-colors ${
+                      showMechanicTime ? 'bg-primary/10 border-primary/30 text-primary' : 'border-border text-muted-foreground hover:text-foreground'
+                    }`}
+                  >
+                    <Clock className="w-3 h-3" />
+                    {showMechanicTime ? formatDateTime(mechanicSignedAt) : 'Time'}
+                  </button>
+                )}
+                <button
+                  type="button"
+                  onClick={() => { mechanicSigCanvas.current?.clear(); setMechanicSignedAt(null); setShowMechanicTime(false); }}
+                  className="text-xs font-medium text-muted-foreground hover:text-foreground transition-colors"
+                >
+                  Clear
+                </button>
+              </div>
+            </div>
           </div>
           <div className="mx-4 sm:mx-5 mb-1 border border-border rounded-xl overflow-hidden bg-muted/30" style={{ touchAction: 'none' }}>
             <SignatureCanvas
-              ref={sigCanvas}
-              canvasProps={{
-                className: 'w-full',
-                style: { width: '100%', height: 160 },
-              }}
+              ref={mechanicSigCanvas}
+              canvasProps={{ className: 'w-full', style: { width: '100%', height: 160 } }}
               penColor="hsl(220, 25%, 10%)"
               backgroundColor="transparent"
+              onEnd={() => setMechanicSignedAt(prev => prev ?? new Date().toISOString())}
             />
           </div>
           <p className="text-[10px] text-muted-foreground px-4 sm:px-5 pb-4 mt-2">
-            By signing, the customer acknowledges the recorded vehicle condition and mileage.
+            By signing, the inspector confirms the accuracy of this inspection report.
+          </p>
+        </section>
+
+        {/* ── Customer Signature ── */}
+        <section className="card-elevated overflow-hidden">
+          <div className="px-4 sm:px-5 pt-4 sm:pt-5 pb-3">
+            <div className="flex items-center justify-between mb-3">
+              <h2 className="text-xs font-semibold uppercase tracking-widest text-muted-foreground">Customer Signature</h2>
+              <div className="flex items-center gap-2">
+                {customerSignedAt && (
+                  <button
+                    type="button"
+                    onClick={() => setShowCustomerTime(v => !v)}
+                    className={`flex items-center gap-1 px-2 py-1 rounded-md text-[11px] font-medium border transition-colors ${
+                      showCustomerTime ? 'bg-primary/10 border-primary/30 text-primary' : 'border-border text-muted-foreground hover:text-foreground'
+                    }`}
+                  >
+                    <Clock className="w-3 h-3" />
+                    {showCustomerTime ? formatDateTime(customerSignedAt) : 'Time'}
+                  </button>
+                )}
+                <button
+                  type="button"
+                  onClick={() => { customerSigCanvas.current?.clear(); setCustomerSignedAt(null); setShowCustomerTime(false); }}
+                  className="text-xs font-medium text-muted-foreground hover:text-foreground transition-colors"
+                >
+                  Clear
+                </button>
+              </div>
+            </div>
+            <div className="mb-3">
+              <label className="text-xs text-muted-foreground mb-1.5 block">Customer Name</label>
+              <input
+                type="text"
+                value={customerName}
+                onChange={e => setCustomerName(e.target.value)}
+                placeholder="Enter customer full name"
+                className={inputCls}
+              />
+            </div>
+          </div>
+          <div className="mx-4 sm:mx-5 mb-1 border border-border rounded-xl overflow-hidden bg-muted/30" style={{ touchAction: 'none' }}>
+            <SignatureCanvas
+              ref={customerSigCanvas}
+              canvasProps={{ className: 'w-full', style: { width: '100%', height: 160 } }}
+              penColor="hsl(220, 25%, 10%)"
+              backgroundColor="transparent"
+              onEnd={() => setCustomerSignedAt(prev => prev ?? new Date().toISOString())}
+            />
+          </div>
+          <p className="text-[10px] text-muted-foreground px-4 sm:px-5 pb-4 mt-2">
+            By signing, the customer acknowledges the recorded vehicle condition.
           </p>
         </section>
 
@@ -490,12 +574,26 @@ const InspectionView = () => {
 
       </div>
 
-      {/* Damage Modal */}
+      {/* Add Damage Modal */}
       {showDamageModal && (
         <DamageModal
           onSubmit={handleAddDamage}
           onClose={() => { setShowDamageModal(false); setClickCoords(null); }}
           view={clickView}
+        />
+      )}
+
+      {/* Edit Damage Modal */}
+      {editingDamageIdx !== null && (
+        <DamageModal
+          onSubmit={handleUpdateDamage}
+          onClose={() => setEditingDamageIdx(null)}
+          view={damages[editingDamageIdx]?.view}
+          initialValues={editingDamageIdx !== null ? {
+            part: damages[editingDamageIdx].part,
+            damage_type: damages[editingDamageIdx].damage_type,
+            severity: damages[editingDamageIdx].severity,
+          } : undefined}
         />
       )}
     </div>

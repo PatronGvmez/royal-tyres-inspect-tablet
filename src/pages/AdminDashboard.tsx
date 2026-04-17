@@ -3,9 +3,9 @@ import { useNavigate } from 'react-router-dom';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { motion } from 'framer-motion';
 import { useAuth } from '@/context/AuthContext';
-import { fetchJobCards, fetchAllJobPhotos, sendNudge, fetchActiveNudges, fetchNudgesForJob, Nudge } from '@/lib/firestore';
+import { fetchJobCards, fetchAllJobPhotos, sendNudge, fetchActiveNudges, fetchNudgesForJob, Nudge, clearAllAppData } from '@/lib/firestore';
 import { JobCard } from '@/types';
-import { Eye, Loader2, CheckCircle2, Camera, Bell, X, Users, Clock, LayoutGrid, List } from 'lucide-react';
+import { Eye, Loader2, CheckCircle2, Camera, Bell, X, Users, Clock, LayoutGrid, List, Trash2, AlertTriangle } from 'lucide-react';
 import Navbar from '@/components/layout/Navbar';
 import { vehicleViewSVGs, VehicleType } from '@/components/inspection/VehicleSVGs';
 import VehicleCardCarousel from '@/components/VehicleCardCarousel';
@@ -46,6 +46,19 @@ const AdminDashboard = () => {
   const [nudgeHistoryLoading, setNudgeHistoryLoading] = useState(false);
   const [activeColumn, setActiveColumn] = useState<JobCard['status']>('booked');
   const [viewMode, setViewMode] = useState<'grid' | 'list'>('grid');
+  const [showClearConfirm, setShowClearConfirm] = useState(false);
+
+  const clearAllMutation = useMutation({
+    mutationFn: clearAllAppData,
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['jobs'] });
+      queryClient.invalidateQueries({ queryKey: ['all_job_photos'] });
+      queryClient.invalidateQueries({ queryKey: ['adminNudges'] });
+      setShowClearConfirm(false);
+      toast.success('All app data cleared. Fresh start!');
+    },
+    onError: () => toast.error('Failed to clear data — please try again.'),
+  });
 
   const { data: jobs = [], isLoading } = useQuery({
     queryKey: ['jobs'],
@@ -133,6 +146,14 @@ const AdminDashboard = () => {
         <div className="flex items-center justify-between mb-4 px-4 sm:px-6">
           <h2 className="text-xl font-display font-bold text-foreground">Job Board</h2>
           <div className="flex items-center gap-2">
+            <button
+              onClick={() => setShowClearConfirm(true)}
+              className="flex items-center gap-2 px-3 py-2 rounded-lg bg-destructive/10 text-sm text-destructive hover:bg-destructive/20 transition-colors"
+              title="Clear all jobs and app data"
+            >
+              <Trash2 className="w-4 h-4" />
+              <span className="hidden sm:inline">Clear Data</span>
+            </button>
             <button
               onClick={() => navigate('/admin/users')}
               className="flex items-center gap-2 px-3 py-2 rounded-lg bg-muted text-sm text-muted-foreground hover:bg-secondary transition-colors"
@@ -646,6 +667,49 @@ const AdminDashboard = () => {
                   {nudgeMutation.isPending ? 'Sending…' : 'Send Notification'}
                 </button>
               </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* ── Clear All Data confirmation dialog ── */}
+      {showClearConfirm && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-foreground/50 backdrop-blur-sm p-4" onClick={() => setShowClearConfirm(false)}>
+          <div
+            className="w-full max-w-sm bg-card rounded-2xl border border-border p-6 space-y-4"
+            style={{ boxShadow: 'var(--shadow-modal)' }}
+            onClick={e => e.stopPropagation()}
+          >
+            <div className="flex items-start gap-3">
+              <div className="w-10 h-10 rounded-xl bg-destructive/10 flex items-center justify-center flex-shrink-0">
+                <AlertTriangle className="w-5 h-5 text-destructive" />
+              </div>
+              <div>
+                <h3 className="text-base font-display font-bold text-foreground">Clear All App Data?</h3>
+                <p className="text-sm text-muted-foreground mt-1">
+                  This will permanently delete <strong>all jobs, photos, inspections, and notifications</strong> from the database. This cannot be undone.
+                </p>
+              </div>
+            </div>
+            <div className="flex gap-3 pt-1">
+              <button
+                onClick={() => setShowClearConfirm(false)}
+                className="flex-1 px-4 py-2.5 rounded-xl bg-muted text-sm font-semibold text-foreground hover:bg-secondary transition-colors"
+              >
+                Cancel
+              </button>
+              <button
+                onClick={() => clearAllMutation.mutate()}
+                disabled={clearAllMutation.isPending}
+                className="flex-1 flex items-center justify-center gap-2 px-4 py-2.5 rounded-xl bg-destructive text-white text-sm font-semibold hover:opacity-90 active:scale-[.98] transition-all disabled:opacity-50"
+              >
+                {clearAllMutation.isPending ? (
+                  <Loader2 className="w-4 h-4 animate-spin" />
+                ) : (
+                  <Trash2 className="w-4 h-4" />
+                )}
+                {clearAllMutation.isPending ? 'Clearing…' : 'Yes, Clear All'}
+              </button>
             </div>
           </div>
         </div>

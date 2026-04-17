@@ -42,8 +42,8 @@ export interface InspectionReport {
   job_card_id: string;
   inspection_type: 'pre_service' | 'post_service';
   vehicle_info?: VehicleInfo; // Vehicle details (optional for backward compatibility)
-  odometer: number;
-  fuel_level: string;
+  odometer?: number;
+  fuel_level?: string;
   tire_conditions: {
     front_left: string;
     front_right: string;
@@ -51,7 +51,14 @@ export interface InspectionReport {
     rear_right: string;
   };
   damages: VehicleDamage[];
+  /** @deprecated use mechanic_signature_url */
   signature_url?: string;
+  mechanic_name?: string;
+  mechanic_signature_url?: string;
+  mechanic_signed_at?: string;
+  customer_name?: string;
+  customer_signature_url?: string;
+  customer_signed_at?: string;
   created_at?: string;
   updated_at?: string;
 }

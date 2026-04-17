@@ -1,7 +1,7 @@
 import React from 'react';
 
 export type VehicleType = 'sedan' | 'hatchback' | 'suv' | 'bakkie' | 'truck';
-export type ViewAngle = 'top' | 'left' | 'right' | 'front' | 'rear';
+export type ViewAngle = 'left' | 'right' | 'front' | 'rear';
 
 interface VehicleSVGProps {
   className?: string;
@@ -22,10 +22,6 @@ const VehicleImg: React.FC<{ src: string; alt: string; className?: string; style
 
 // ─── SEDAN ───
 
-const SedanTopImg: React.FC<VehicleSVGProps> = ({ className, style }) => (
-  <VehicleImg src="/sedantop.png" alt="Sedan Top View" className={className} style={style} />
-);
-
 const SedanLeftImg: React.FC<VehicleSVGProps> = ({ className, style }) => (
   <VehicleImg src="/sedanright.png" alt="Sedan Left View" className={className} style={style} flip />
 );
@@ -43,10 +39,6 @@ const SedanRearImg: React.FC<VehicleSVGProps> = ({ className, style }) => (
 );
 
 // ─── HATCHBACK ───
-
-const HatchbackTopImg: React.FC<VehicleSVGProps> = ({ className, style }) => (
-  <VehicleImg src="/hatchback-top.png" alt="Hatchback Top View" className={className} style={style} />
-);
 
 const HatchbackLeftImg: React.FC<VehicleSVGProps> = ({ className, style }) => (
   <VehicleImg src="/hatchback-left.png" alt="Hatchback Left View" className={className} style={style} />
@@ -66,10 +58,6 @@ const HatchbackRearImg: React.FC<VehicleSVGProps> = ({ className, style }) => (
 
 // ─── SUV ───
 
-const SUVTopImg: React.FC<VehicleSVGProps> = ({ className, style }) => (
-  <VehicleImg src="/SUV_Top.png" alt="SUV Top View" className={className} style={style} />
-);
-
 const SUVLeftImg: React.FC<VehicleSVGProps> = ({ className, style }) => (
   <VehicleImg src="/SUV_LEFT_SIDE.png" alt="SUV Left View" className={className} style={style} />
 );
@@ -88,10 +76,6 @@ const SUVRearImg: React.FC<VehicleSVGProps> = ({ className, style }) => (
 
 // ─── BAKKIE ───
 
-const BakkieTopImg: React.FC<VehicleSVGProps> = ({ className, style }) => (
-  <VehicleImg src="/bakkie_top.png" alt="Bakkie Top View" className={className} style={style} />
-);
-
 const BakkieLeftImg: React.FC<VehicleSVGProps> = ({ className, style }) => (
   <VehicleImg src="/bakkie_right_side.png" alt="Bakkie Left View" className={className} style={style} flip />
 );
@@ -109,10 +93,6 @@ const BakkieRearImg: React.FC<VehicleSVGProps> = ({ className, style }) => (
 );
 
 // ─── TRUCK ───
-
-const TruckTopImg: React.FC<VehicleSVGProps> = ({ className, style }) => (
-  <VehicleImg src="/Truck_top.png" alt="Truck Top View" className={className} style={style} />
-);
 
 const TruckLeftImg: React.FC<VehicleSVGProps> = ({ className, style }) => (
   <VehicleImg src="/Truck_left_side.png" alt="Truck Left View" className={className} style={style} />
@@ -133,11 +113,11 @@ const TruckRearImg: React.FC<VehicleSVGProps> = ({ className, style }) => (
 // ─── REGISTRY ───
 
 export const vehicleViewSVGs: Record<VehicleType, Record<ViewAngle, React.FC<VehicleSVGProps>>> = {
-  sedan:    { top: SedanTopImg,    left: SedanLeftImg,    right: SedanRightImg,    front: SedanFrontImg,    rear: SedanRearImg    },
-  hatchback:{ top: HatchbackTopImg,left: HatchbackLeftImg,right: HatchbackRightImg,front: HatchbackFrontImg,rear: HatchbackRearImg },
-  suv:      { top: SUVTopImg,      left: SUVLeftImg,      right: SUVRightImg,      front: SUVFrontImg,      rear: SUVRearImg      },
-  bakkie:   { top: BakkieTopImg,   left: BakkieLeftImg,   right: BakkieRightImg,   front: BakkieFrontImg,   rear: BakkieRearImg   },
-  truck:    { top: TruckTopImg,    left: TruckLeftImg,    right: TruckRightImg,    front: TruckFrontImg,    rear: TruckRearImg    },
+  sedan:    { left: SedanLeftImg,    right: SedanRightImg,    front: SedanFrontImg,    rear: SedanRearImg    },
+  hatchback:{ left: HatchbackLeftImg,right: HatchbackRightImg,front: HatchbackFrontImg,rear: HatchbackRearImg },
+  suv:      { left: SUVLeftImg,      right: SUVRightImg,      front: SUVFrontImg,      rear: SUVRearImg      },
+  bakkie:   { left: BakkieLeftImg,   right: BakkieRightImg,   front: BakkieFrontImg,   rear: BakkieRearImg   },
+  truck:    { left: TruckLeftImg,    right: TruckRightImg,    front: TruckFrontImg,    rear: TruckRearImg    },
 };
 
 export const vehicleLabels: Record<VehicleType, string> = {
@@ -149,7 +129,6 @@ export const vehicleLabels: Record<VehicleType, string> = {
 };
 
 export const viewLabels: Record<ViewAngle, string> = {
-  top: 'Top',
   left: 'Left Side',
   right: 'Right Side',
   front: 'Front',

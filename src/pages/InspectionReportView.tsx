@@ -89,7 +89,7 @@ const InspectionReportView: React.FC = () => {
     <div className="min-h-screen bg-background pb-12">
       {/* ── Header ── */}
       <header className="sticky top-0 z-30 bg-card border-b border-border">
-        <div className="max-w-5xl mx-auto px-4 sm:px-6 py-3 flex items-center gap-3">
+        <div className="max-w-6xl mx-auto px-4 sm:px-6 py-3 flex items-center gap-3">
           <button
             onClick={() => navigate('/mechanic')}
             className="p-2 -ml-2 rounded-lg text-muted-foreground hover:bg-muted transition-colors"
@@ -113,7 +113,7 @@ const InspectionReportView: React.FC = () => {
         </div>
       </header>
 
-      <div className="max-w-5xl mx-auto px-4 sm:px-6 py-6 space-y-4">
+      <div className="max-w-6xl mx-auto px-4 sm:px-6 py-6 space-y-4">
 
         {/* ── Vehicle Banner ── */}
         <div className="rounded-2xl overflow-hidden border border-border" style={{ background: 'var(--vehicle-card-bg, linear-gradient(135deg, hsl(var(--primary)/0.12), hsl(var(--accent)/0.08)))' }}>

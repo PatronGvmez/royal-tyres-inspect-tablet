@@ -137,6 +137,25 @@ const SA_SEED_JOBS: Array<{
 ];
 
 /**
+ * Deletes ALL documents from jobs, job_photos, inspections, inspections360,
+ * and nudges collections. Used by admins to reset the app to a clean state.
+ */
+export async function clearAllAppData(): Promise<void> {
+  const COLLECTIONS = ['jobs', 'job_photos', 'inspections', 'inspections360', 'nudges'];
+  for (const col of COLLECTIONS) {
+    const snap = await getDocs(collection(db, col));
+    if (snap.empty) continue;
+    // Firestore batches are capped at 500 ops — chunk if needed
+    const refs = snap.docs.map(d => d.ref);
+    for (let i = 0; i < refs.length; i += 500) {
+      const batch = writeBatch(db);
+      refs.slice(i, i + 500).forEach(r => batch.delete(r));
+      await batch.commit();
+    }
+  }
+}
+
+/**
  * Deletes ALL jobs in Firestore and re-seeds 10 realistic SA jobs,
  * distributing them evenly across all mechanics found in the `users` collection.
  */
