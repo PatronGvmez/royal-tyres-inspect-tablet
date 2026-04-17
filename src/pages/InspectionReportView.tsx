@@ -179,35 +179,41 @@ const InspectionReportView: React.FC = () => {
 
         {report && (
           <>
-            {/* ── Odometer & Fuel ── */}
-            <div className={sectionCls}>
-              <p className={headingCls}>Vehicle Status</p>
-              <div className="grid grid-cols-2 gap-4">
-                {/* Odometer */}
-                <div className="flex items-start gap-3 p-3 rounded-xl bg-muted/50 border border-border">
-                  <div className="p-2 rounded-lg bg-primary/10">
-                    <Gauge className="w-4 h-4 text-primary" />
-                  </div>
-                  <div>
-                    <p className={labelCls}>Odometer</p>
-                    <p className={valueCls}>{report.odometer.toLocaleString()} km</p>
-                  </div>
-                </div>
-                {/* Fuel Level */}
-                <div className="flex items-start gap-3 p-3 rounded-xl bg-muted/50 border border-border">
-                  <div className="p-2 rounded-lg bg-success/10">
-                    <Fuel className="w-4 h-4 text-success" />
-                  </div>
-                  <div className="flex-1 min-w-0">
-                    <p className={labelCls}>Fuel Level</p>
-                    <p className={`${valueCls} mb-1`}>{report.fuel_level}</p>
-                    <div className="h-1.5 w-full bg-muted rounded-full overflow-hidden">
-                      <div className={`h-full bg-success rounded-full transition-all ${fuelLevelWidths[report.fuel_level] ?? 'w-1/2'}`} />
+            {/* ── Odometer & Fuel — only shown when data exists ── */}
+            {(report.odometer != null || report.fuel_level) && (
+              <div className={sectionCls}>
+                <p className={headingCls}>Vehicle Status</p>
+                <div className="grid grid-cols-2 gap-4">
+                  {/* Odometer */}
+                  {report.odometer != null && (
+                    <div className="flex items-start gap-3 p-3 rounded-xl bg-muted/50 border border-border">
+                      <div className="p-2 rounded-lg bg-primary/10">
+                        <Gauge className="w-4 h-4 text-primary" />
+                      </div>
+                      <div>
+                        <p className={labelCls}>Odometer</p>
+                        <p className={valueCls}>{report.odometer.toLocaleString()} km</p>
+                      </div>
                     </div>
-                  </div>
+                  )}
+                  {/* Fuel Level */}
+                  {report.fuel_level && (
+                    <div className="flex items-start gap-3 p-3 rounded-xl bg-muted/50 border border-border">
+                      <div className="p-2 rounded-lg bg-success/10">
+                        <Fuel className="w-4 h-4 text-success" />
+                      </div>
+                      <div className="flex-1 min-w-0">
+                        <p className={labelCls}>Fuel Level</p>
+                        <p className={`${valueCls} mb-1`}>{report.fuel_level}</p>
+                        <div className="h-1.5 w-full bg-muted rounded-full overflow-hidden">
+                          <div className={`h-full bg-success rounded-full transition-all ${fuelLevelWidths[report.fuel_level] ?? 'w-1/2'}`} />
+                        </div>
+                      </div>
+                    </div>
+                  )}
                 </div>
               </div>
-            </div>
+            )}
 
             {/* ── Tyre Conditions ── */}
             <div className={sectionCls}>

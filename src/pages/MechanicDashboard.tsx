@@ -260,16 +260,25 @@ const MechanicDashboard = () => {
   const activeJobs = myJobs.filter(
     j => j.status !== 'completed' &&
     matchesSearch(j) &&
-    (statusFilter === 'all' || j.status === statusFilter)
+    (statusFilter === 'all' || statusFilter === 'my_jobs' || j.status === statusFilter)
   );
   const completedJobs = myJobs.filter(
     j => j.status === 'completed' &&
     matchesSearch(j) &&
-    (statusFilter === 'all' || statusFilter === 'completed')
+    (statusFilter === 'all' || statusFilter === 'my_jobs' || statusFilter === 'completed')
   );
   const inProgressCount = myJobs.filter(j => j.status === 'in_progress').length;
   const bookedCount = myJobs.filter(j => j.status === 'booked').length;
   const hasNoResults = searchQuery.trim() !== '' && unclaimedJobs.length === 0 && activeJobs.length === 0 && completedJobs.length === 0;
+
+  // Tab definitions for the filter bar
+  const filterTabs = [
+    { key: 'all',         label: 'All Jobs',    count: allJobs.length,                                          color: 'text-primary',  dot: 'bg-primary' },
+    { key: 'my_jobs',     label: 'My Jobs',     count: myJobs.length,                                           color: 'text-success',  dot: 'bg-success' },
+    { key: 'booked',      label: 'Booked',      count: allJobs.filter(j => j.status === 'booked').length,       color: 'text-primary',  dot: 'bg-primary' },
+    { key: 'in_progress', label: 'In Progress', count: allJobs.filter(j => j.status === 'in_progress').length,  color: 'text-warning',  dot: 'bg-warning' },
+    { key: 'completed',   label: 'Completed',   count: allJobs.filter(j => j.status === 'completed').length,    color: 'text-success',  dot: 'bg-success' },
+  ] as const;
 
   return (
     <div className="min-h-screen bg-background pb-16">
@@ -415,64 +424,66 @@ const MechanicDashboard = () => {
             {/* ── MAIN ── */}
             <main className="space-y-8 min-w-0">
 
-              {/* Search + Filter Bar */}
-              <div className="space-y-3">
-                {/* Search input */}
-                <div className="relative">
-                  <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground pointer-events-none" />
-                  <input
-                    type="text"
-                    placeholder="Search by name, plate number, job ID or service…"
-                    value={searchQuery}
-                    onChange={e => setSearchQuery(e.target.value)}
-                    className={`${inputCls} pl-9 ${searchQuery ? 'pr-9' : ''}`}
-                  />
-                  {searchQuery && (
-                    <button
-                      onClick={() => setSearchQuery('')}
-                      className="absolute right-3 top-1/2 -translate-y-1/2 p-0.5 rounded-full text-muted-foreground hover:text-foreground transition-colors"
-                      aria-label="Clear search"
-                    >
-                      <X className="w-3.5 h-3.5" />
-                    </button>
-                  )}
+              {/* ── Search + Filter Bar ── */}
+              <div className="card-elevated overflow-hidden">
+                {/* Search row */}
+                <div className="px-4 pt-4 pb-3 border-b border-border">
+                  <div className="relative">
+                    <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground pointer-events-none" />
+                    <input
+                      type="text"
+                      placeholder="Search by name, plate number, job ID or service…"
+                      value={searchQuery}
+                      onChange={e => setSearchQuery(e.target.value)}
+                      className={`${inputCls} pl-9 ${searchQuery ? 'pr-9' : ''}`}
+                    />
+                    {searchQuery && (
+                      <button
+                        onClick={() => setSearchQuery('')}
+                        className="absolute right-3 top-1/2 -translate-y-1/2 p-0.5 rounded-full text-muted-foreground hover:text-foreground transition-colors"
+                        aria-label="Clear search"
+                      >
+                        <X className="w-3.5 h-3.5" />
+                      </button>
+                    )}
+                  </div>
                 </div>
 
-                {/* Status filter pills */}
-                <div className="flex items-center gap-2 flex-wrap">
-                  {(
-                    [
-                      { key: 'all',         label: 'All Jobs',    count: allJobs.length },
-                      { key: 'booked',      label: 'Booked',      count: allJobs.filter(j => j.status === 'booked').length },
-                      { key: 'in_progress', label: 'In Progress', count: allJobs.filter(j => j.status === 'in_progress').length },
-                      { key: 'completed',   label: 'Completed',   count: allJobs.filter(j => j.status === 'completed').length },
-                    ] as const
-                  ).map(({ key, label, count }) => (
-                    <button
-                      key={key}
-                      onClick={() => setStatusFilter(key)}
-                      className={`flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs font-semibold transition-all ${
-                        statusFilter === key
-                          ? 'bg-primary text-primary-foreground shadow-sm'
-                          : 'bg-muted text-muted-foreground hover:bg-muted/70'
-                      }`}
-                    >
-                      {label}
-                      {count > 0 && (
-                        <span className={`text-[10px] font-bold px-1.5 py-0.5 rounded-full ${
-                          statusFilter === key
-                            ? 'bg-white/20 text-primary-foreground'
-                            : 'bg-background text-foreground'
-                        }`}>{count}</span>
-                      )}
-                    </button>
-                  ))}
+                {/* Tab bar */}
+                <div className="flex items-stretch overflow-x-auto scrollbar-none">
+                  {filterTabs.map(({ key, label, count, color, dot }) => {
+                    const isActive = statusFilter === key;
+                    return (
+                      <button
+                        key={key}
+                        onClick={() => setStatusFilter(key)}
+                        className={`relative flex-shrink-0 flex flex-col items-center gap-1 px-4 py-3 text-xs font-semibold transition-colors ${
+                          isActive ? 'text-foreground' : 'text-muted-foreground hover:text-foreground hover:bg-muted/40'
+                        }`}
+                      >
+                        <div className="flex items-center gap-1.5">
+                          {label}
+                          {count > 0 && (
+                            <span className={`min-w-[18px] h-[18px] px-1 rounded-full text-[10px] font-bold flex items-center justify-center ${
+                              isActive
+                                ? `${dot} text-white`
+                                : 'bg-muted text-muted-foreground'
+                            }`}>{count}</span>
+                          )}
+                        </div>
+                        {/* Active underline */}
+                        {isActive && (
+                          <span className={`absolute bottom-0 left-2 right-2 h-0.5 rounded-full ${dot}`} />
+                        )}
+                      </button>
+                    );
+                  })}
                   {(searchQuery || statusFilter !== 'all') && (
                     <button
                       onClick={() => { setSearchQuery(''); setStatusFilter('all'); }}
-                      className="ml-1 flex items-center gap-1 px-2.5 py-1.5 rounded-full text-xs font-medium text-muted-foreground hover:text-foreground hover:bg-muted transition-all"
+                      className="flex-shrink-0 flex items-center gap-1 px-3 py-3 text-xs text-muted-foreground hover:text-foreground hover:bg-muted/40 transition-colors ml-auto"
                     >
-                      <X className="w-3 h-3" /> Clear
+                      <X className="w-3 h-3" /> Reset
                     </button>
                   )}
                 </div>
