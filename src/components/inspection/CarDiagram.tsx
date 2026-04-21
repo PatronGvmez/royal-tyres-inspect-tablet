@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef, useCallback } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { VehicleDamage } from '@/types';
 import { vehicleViewSVGs, vehicleLabels, viewLabels, VehicleType, ViewAngle } from './VehicleSVGs';
 import { Car, RotateCcw, Camera } from 'lucide-react';
@@ -32,9 +32,13 @@ const CarDiagram: React.FC<CarDiagramProps> = ({ damages, onAreaClick, onRemoveD
   const normalizedVehicleType = (vehicleType?.toLowerCase() as VehicleType) || 'sedan';
   const [selectedType, setSelectedType] = useState<VehicleType>(normalizedVehicleType);
   const [activeView, setActiveView] = useState<ViewAngle>('front');
+  // Visual state only — for scale animation while dragging
   const [dragging, setDragging] = useState<string | null>(null);
   const [draggingDamage, setDraggingDamage] = useState<number | null>(null);
-  const damageDragMoved = useRef(false);
+  // Refs for IMMEDIATE drag tracking — no stale closure, no missed first move
+  const draggingTyreRef = useRef<string | null>(null);
+  const draggingDamageRef = useRef<number | null>(null);
+  const dragMovedRef = useRef(false);  // true once pointer has moved during a drag
   const diagramRef = useRef<HTMLDivElement>(null);
 
   // Sync when parent updates vehicleType (e.g. after job card loads)
@@ -48,6 +52,8 @@ const CarDiagram: React.FC<CarDiagramProps> = ({ damages, onAreaClick, onRemoveD
   };
 
   const handleClick = (e: React.MouseEvent<HTMLDivElement>) => {
+    // Suppress click that fires after a drag ends
+    if (dragMovedRef.current) return;
     const rect = e.currentTarget.getBoundingClientRect();
     const x = ((e.clientX - rect.left) / rect.width) * 100;
     const y = ((e.clientY - rect.top) / rect.height) * 100;
@@ -61,6 +67,16 @@ const CarDiagram: React.FC<CarDiagramProps> = ({ damages, onAreaClick, onRemoveD
     const x = ((touch.clientX - rect.left) / rect.width) * 100;
     const y = ((touch.clientY - rect.top) / rect.height) * 100;
     onAreaClick(x, y, activeView);
+  };
+
+  // Safety net: if pointer leaves the diagram area (e.g. user moves off-screen),
+  // clear any active drag so state doesn't get stuck.
+  const handleContainerPointerUp = () => {
+    draggingTyreRef.current = null;
+    draggingDamageRef.current = null;
+    setDragging(null);
+    setDraggingDamage(null);
+    requestAnimationFrame(() => { dragMovedRef.current = false; });
   };
 
   const SVGComponent = vehicleViewSVGs[selectedType][activeView];
@@ -94,18 +110,20 @@ const CarDiagram: React.FC<CarDiagramProps> = ({ damages, onAreaClick, onRemoveD
       {/* Diagram Area */}
       <div
         ref={diagramRef}
-        className="relative w-full rounded-lg overflow-hidden border border-border bg-card cursor-crosshair select-none"
+        className="relative w-full rounded-lg overflow-hidden border border-border bg-card cursor-crosshair select-none touch-none"
         onClick={handleClick}
         onTouchStart={(e) => {
           // Don't open damage modal when touching a tyre overlay or damage pin
           if ((e.target as HTMLElement).closest('[data-tyre-overlay],[data-damage-pin]')) return;
           handleTouch(e);
         }}
+        onPointerUp={handleContainerPointerUp}
+        onPointerLeave={handleContainerPointerUp}
         style={{ height: 260 }}
       >
         {/* Photo OR SVG — mutually exclusive. Photo hides the default model entirely. */}
         {photos?.[activeView] ? (
-          <div className="absolute inset-0 z-0 flex items-center justify-center bg-muted">
+          <div className="absolute inset-0 z-0 flex items-center justify-center bg-muted p-5">
             <img
               src={photos[activeView]}
               alt={`${activeView} view`}
@@ -136,19 +154,28 @@ const CarDiagram: React.FC<CarDiagramProps> = ({ damages, onAreaClick, onRemoveD
               onPointerDown={canDrag ? (e) => {
                 e.preventDefault();
                 e.stopPropagation();
+                // setPointerCapture guarantees ALL subsequent pointermove/pointerup
+                // events for this pointer go to THIS element — even if cursor moves
+                // off it or outside the browser. Most reliable drag mechanism.
                 e.currentTarget.setPointerCapture(e.pointerId);
+                draggingTyreRef.current = ov.key;  // sync ref — no stale state
+                dragMovedRef.current = false;
                 setDragging(ov.key);
               } : undefined}
               onPointerMove={canDrag ? (e) => {
-                if (dragging !== ov.key || !diagramRef.current) return;
+                // Ref check instead of state — ref was set synchronously above
+                if (draggingTyreRef.current !== ov.key || !diagramRef.current || !onTyrePositionChange) return;
+                dragMovedRef.current = true;
                 const rect = diagramRef.current.getBoundingClientRect();
                 const x = Math.max(3, Math.min(97, ((e.clientX - rect.left) / rect.width) * 100));
                 const y = Math.max(3, Math.min(97, ((e.clientY - rect.top) / rect.height) * 100));
-                onTyrePositionChange!(ov.key, activeView, x, y);
+                onTyrePositionChange(ov.key, activeView, x, y);
               } : undefined}
               onPointerUp={canDrag ? (e) => {
                 e.stopPropagation();
+                draggingTyreRef.current = null;
                 setDragging(null);
+                requestAnimationFrame(() => { dragMovedRef.current = false; });
               } : undefined}
               onClick={(e) => e.stopPropagation()}
             >
@@ -235,22 +262,27 @@ const CarDiagram: React.FC<CarDiagramProps> = ({ damages, onAreaClick, onRemoveD
                 onPointerDown={(e) => {
                   e.preventDefault();
                   e.stopPropagation();
+                  // setPointerCapture: all future pointermove/pointerup for this
+                  // pointer are sent HERE — even when cursor leaves this element
                   e.currentTarget.setPointerCapture(e.pointerId);
+                  draggingDamageRef.current = globalIdx;  // sync ref — no stale state
+                  dragMovedRef.current = false;
                   setDraggingDamage(globalIdx);
-                  damageDragMoved.current = false;
                 }}
                 onPointerMove={(e) => {
-                  if (draggingDamage !== globalIdx || !diagramRef.current || !onDamageMove) return;
-                  damageDragMoved.current = true;
+                  // Use ref (set synchronously above) — NOT state (would be stale on first move)
+                  if (draggingDamageRef.current !== globalIdx || !diagramRef.current || !onDamageMove) return;
+                  dragMovedRef.current = true;
                   const rect = diagramRef.current.getBoundingClientRect();
                   const x = Math.max(2, Math.min(98, ((e.clientX - rect.left) / rect.width) * 100));
                   const y = Math.max(2, Math.min(98, ((e.clientY - rect.top) / rect.height) * 100));
-                  onDamageMove(globalIdx, x, y);
+                  onDamageMove(draggingDamageRef.current, x, y);
                 }}
                 onPointerUp={(e) => {
                   e.stopPropagation();
+                  draggingDamageRef.current = null;
                   setDraggingDamage(null);
-                  damageDragMoved.current = false;
+                  requestAnimationFrame(() => { dragMovedRef.current = false; });
                 }}
                 onClick={(e) => e.stopPropagation()}
               >

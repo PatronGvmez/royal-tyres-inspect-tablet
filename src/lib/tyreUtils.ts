@@ -18,35 +18,38 @@ export const TYRE_POSITIONS = [
 type TyrePositionMap = Record<string, Partial<Record<string, { x: number; y: number }>>>;
 
 export const TYRE_WHEEL_COORDS: Record<string, TyrePositionMap> = {
+  // Coordinates are % within the padded diagram box (p-5 padding applied to photo container).
+  // front/rear views: wheels at bottom corners of the car.
+  // left/right side views: front wheel on the near side, rear wheel further back.
   sedan: {
-    front_left:  { front: { x: 67, y: 80 }, left:  { x: 24, y: 76 }, top: { x: 60, y: 23 } },
-    front_right: { front: { x: 33, y: 80 }, right: { x: 76, y: 76 }, top: { x: 40, y: 23 } },
-    rear_left:   { rear:  { x: 67, y: 80 }, left:  { x: 76, y: 76 }, top: { x: 60, y: 73 } },
-    rear_right:  { rear:  { x: 33, y: 80 }, right: { x: 24, y: 76 }, top: { x: 40, y: 73 } },
+    front_left:  { front: { x: 68, y: 87 }, left:  { x: 24, y: 82 }, top: { x: 60, y: 23 } },
+    front_right: { front: { x: 32, y: 87 }, right: { x: 76, y: 82 }, top: { x: 40, y: 23 } },
+    rear_left:   { rear:  { x: 68, y: 87 }, left:  { x: 76, y: 82 }, top: { x: 60, y: 73 } },
+    rear_right:  { rear:  { x: 32, y: 87 }, right: { x: 24, y: 82 }, top: { x: 40, y: 73 } },
   },
   hatchback: {
-    front_left:  { front: { x: 67, y: 80 }, left:  { x: 24, y: 75 }, top: { x: 60, y: 22 } },
-    front_right: { front: { x: 33, y: 80 }, right: { x: 76, y: 75 }, top: { x: 40, y: 22 } },
-    rear_left:   { rear:  { x: 67, y: 80 }, left:  { x: 76, y: 75 }, top: { x: 60, y: 74 } },
-    rear_right:  { rear:  { x: 33, y: 80 }, right: { x: 24, y: 75 }, top: { x: 40, y: 74 } },
+    front_left:  { front: { x: 68, y: 87 }, left:  { x: 24, y: 81 }, top: { x: 60, y: 22 } },
+    front_right: { front: { x: 32, y: 87 }, right: { x: 76, y: 81 }, top: { x: 40, y: 22 } },
+    rear_left:   { rear:  { x: 68, y: 87 }, left:  { x: 76, y: 81 }, top: { x: 60, y: 74 } },
+    rear_right:  { rear:  { x: 32, y: 87 }, right: { x: 24, y: 81 }, top: { x: 40, y: 74 } },
   },
   suv: {
-    front_left:  { front: { x: 67, y: 77 }, left:  { x: 25, y: 71 }, top: { x: 59, y: 21 } },
-    front_right: { front: { x: 33, y: 77 }, right: { x: 75, y: 71 }, top: { x: 41, y: 21 } },
-    rear_left:   { rear:  { x: 67, y: 77 }, left:  { x: 75, y: 71 }, top: { x: 59, y: 75 } },
-    rear_right:  { rear:  { x: 33, y: 77 }, right: { x: 25, y: 71 }, top: { x: 41, y: 75 } },
+    front_left:  { front: { x: 68, y: 85 }, left:  { x: 25, y: 79 }, top: { x: 59, y: 21 } },
+    front_right: { front: { x: 32, y: 85 }, right: { x: 75, y: 79 }, top: { x: 41, y: 21 } },
+    rear_left:   { rear:  { x: 68, y: 85 }, left:  { x: 75, y: 79 }, top: { x: 59, y: 75 } },
+    rear_right:  { rear:  { x: 32, y: 85 }, right: { x: 25, y: 79 }, top: { x: 41, y: 75 } },
   },
   bakkie: {
-    front_left:  { front: { x: 67, y: 75 }, left:  { x: 23, y: 70 }, top: { x: 60, y: 20 } },
-    front_right: { front: { x: 33, y: 75 }, right: { x: 77, y: 70 }, top: { x: 40, y: 20 } },
-    rear_left:   { rear:  { x: 67, y: 75 }, left:  { x: 77, y: 71 }, top: { x: 60, y: 77 } },
-    rear_right:  { rear:  { x: 33, y: 75 }, right: { x: 23, y: 71 }, top: { x: 40, y: 77 } },
+    front_left:  { front: { x: 68, y: 83 }, left:  { x: 23, y: 77 }, top: { x: 60, y: 20 } },
+    front_right: { front: { x: 32, y: 83 }, right: { x: 77, y: 77 }, top: { x: 40, y: 20 } },
+    rear_left:   { rear:  { x: 68, y: 83 }, left:  { x: 77, y: 78 }, top: { x: 60, y: 77 } },
+    rear_right:  { rear:  { x: 32, y: 83 }, right: { x: 23, y: 78 }, top: { x: 40, y: 77 } },
   },
   truck: {
-    front_left:  { front: { x: 67, y: 73 }, left:  { x: 22, y: 68 }, top: { x: 60, y: 19 } },
-    front_right: { front: { x: 33, y: 73 }, right: { x: 78, y: 68 }, top: { x: 40, y: 19 } },
-    rear_left:   { rear:  { x: 67, y: 73 }, left:  { x: 77, y: 70 }, top: { x: 60, y: 78 } },
-    rear_right:  { rear:  { x: 33, y: 73 }, right: { x: 23, y: 70 }, top: { x: 40, y: 78 } },
+    front_left:  { front: { x: 68, y: 81 }, left:  { x: 22, y: 76 }, top: { x: 60, y: 19 } },
+    front_right: { front: { x: 32, y: 81 }, right: { x: 78, y: 76 }, top: { x: 40, y: 19 } },
+    rear_left:   { rear:  { x: 68, y: 81 }, left:  { x: 77, y: 77 }, top: { x: 60, y: 78 } },
+    rear_right:  { rear:  { x: 32, y: 81 }, right: { x: 23, y: 77 }, top: { x: 40, y: 78 } },
   },
 };
 

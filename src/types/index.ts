@@ -51,6 +51,8 @@ export interface InspectionReport {
     rear_right: string;
   };
   damages: VehicleDamage[];
+  /** Mechanic-dragged tyre marker positions — keyed by tyre key then view angle */
+  tyreAdjustments?: Record<string, Partial<Record<string, { x: number; y: number }>>>;
   /** @deprecated use mechanic_signature_url */
   signature_url?: string;
   mechanic_name?: string;

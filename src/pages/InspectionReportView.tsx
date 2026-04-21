@@ -78,7 +78,24 @@ const InspectionReportView: React.FC = () => {
   const vehicleType = (vehicleViewSVGs[job.vehicle_type as VehicleType] ? job.vehicle_type : 'sedan') as VehicleType;
   const VehicleImg = vehicleViewSVGs[vehicleType].front;
 
-  const tyreOverlays = report ? buildTyreOverlays(report.tire_conditions, vehicleType) : {};
+  const tyreOverlays = (() => {
+    if (!report) return {};
+    const base = buildTyreOverlays(report.tire_conditions, vehicleType);
+    Object.entries(base).forEach(([view, overlays]) => {
+      if (!overlays) return;
+      // Apply saved drag positions
+      overlays.forEach(ov => {
+        const pos = report.tyreAdjustments?.[ov.key]?.[view];
+        if (pos) { ov.x = pos.x; ov.y = pos.y; }
+      });
+      // When a real photo is present for this view, only keep overlays that the
+      // mechanic explicitly dragged — default SVG positions don't align with photos
+      if (photos?.[view as string]) {
+        base[view] = overlays.filter(ov => !!report.tyreAdjustments?.[ov.key]?.[view]);
+      }
+    });
+    return base;
+  })();
 
   const sectionCls = 'bg-card border border-border rounded-2xl p-5 space-y-4';
   const headingCls = 'text-xs font-semibold uppercase tracking-widest text-muted-foreground';

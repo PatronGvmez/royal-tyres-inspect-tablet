@@ -3,6 +3,11 @@ import { LogOut, Sun, Moon, Bell, X, User, CheckCircle2 } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 import { useTheme } from '@/hooks/use-theme';
 import RoyalTyresIcon from '@/components/RoyalTyresIcon';
+import {
+  AlertDialog, AlertDialogAction, AlertDialogCancel,
+  AlertDialogContent, AlertDialogDescription, AlertDialogFooter,
+  AlertDialogHeader, AlertDialogTitle,
+} from '@/components/ui/alert-dialog';
 
 interface NavNudge {
   id: string;
@@ -40,6 +45,7 @@ const Navbar = ({
   const navigate = useNavigate();
   const { isDark, toggle } = useTheme();
   const [panelOpen, setPanelOpen] = useState(false);
+  const [confirmOpen, setConfirmOpen] = useState(false);
   const bellRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
@@ -55,6 +61,8 @@ const Navbar = ({
     await onLogout();
     navigate('/');
   };
+
+  const handleLogoutClick = () => setConfirmOpen(true);
 
   const unreadCount = nudges.filter(n => !n.acknowledged).length;
 
@@ -219,7 +227,7 @@ const Navbar = ({
           </button>
 
           <button
-            onClick={handleLogout}
+            onClick={handleLogoutClick}
             className="flex items-center gap-2 px-3 py-1.5 rounded-lg text-sm text-muted-foreground hover:bg-muted transition-colors"
             title="Sign out"
           >
@@ -228,6 +236,27 @@ const Navbar = ({
           </button>
         </div>
       </div>
+
+      {/* Sign-out confirmation dialog */}
+      <AlertDialog open={confirmOpen} onOpenChange={setConfirmOpen}>
+        <AlertDialogContent className="max-w-sm">
+          <AlertDialogHeader>
+            <AlertDialogTitle>Sign out?</AlertDialogTitle>
+            <AlertDialogDescription>
+              You'll be returned to the login screen. Any unsaved changes will be lost.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>Cancel</AlertDialogCancel>
+            <AlertDialogAction
+              onClick={handleLogout}
+              className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+            >
+              Sign out
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </header>
   );
 };

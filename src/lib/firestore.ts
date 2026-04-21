@@ -14,7 +14,7 @@ import {
   Timestamp,
 } from 'firebase/firestore';
 import { db } from './firebase';
-import { JobCard, InspectionReport, Inspection360, User } from '@/types';
+import { JobCard, InspectionReport, Inspection360, User, VehicleDamage } from '@/types';
 
 // ─── User Profiles ────────────────────────────────────────────────────────────
 
@@ -234,7 +234,9 @@ export async function saveInspectionReport(report: InspectionReport): Promise<vo
         ? report.signature_url.slice(0, 204_800)
         : report.signature_url,
   };
-  await setDoc(doc(db, 'inspections', report.id), {
+  // Use job_card_id as the document ID so re-submissions always overwrite the
+  // previous report for the same job — prevents stale old docs from being returned.
+  await setDoc(doc(db, 'inspections', report.job_card_id), {
     ...payload,
     saved_at: serverTimestamp(),
   });
@@ -243,13 +245,53 @@ export async function saveInspectionReport(report: InspectionReport): Promise<vo
 export async function fetchInspectionReport(
   jobCardId: string
 ): Promise<InspectionReport | null> {
-  const q = query(
+  // 1. Try new format first — document ID equals job_card_id (set after the fix)
+  const directSnap = await getDoc(doc(db, 'inspections', jobCardId));
+  if (directSnap.exists()) return directSnap.data() as InspectionReport;
+
+  // 2. Fall back to legacy format — documents were stored under IR-<timestamp> IDs,
+  //    ordered by saved_at descending so the most recent submission wins.
+  const legacyQ = query(
     collection(db, 'inspections'),
-    where('job_card_id', '==', jobCardId)
+    where('job_card_id', '==', jobCardId),
+    orderBy('saved_at', 'desc'),
   );
-  const snap = await getDocs(q);
-  if (snap.empty) return null;
-  return snap.docs[0].data() as InspectionReport;
+  const legacySnap = await getDocs(legacyQ);
+  if (legacySnap.empty) return null;
+  return legacySnap.docs[0].data() as InspectionReport;
+}
+
+// ─── Inspection Drafts (auto-save for in-progress work) ───────────────────────
+
+export interface InspectionDraft {
+  job_card_id: string;
+  tires: { front_left: string; front_right: string; rear_left: string; rear_right: string };
+  damages: VehicleDamage[];
+  tyreAdjustments: Record<string, Partial<Record<string, { x: number; y: number }>>>;
+  customerName: string;
+  saved_at?: unknown;
+}
+
+/** Persist in-progress inspection form state so mechanics can resume after navigating away. */
+export async function saveInspectionDraft(
+  jobId: string,
+  draft: Omit<InspectionDraft, 'saved_at'>
+): Promise<void> {
+  await setDoc(doc(db, 'inspection_drafts', jobId), {
+    ...draft,
+    saved_at: serverTimestamp(),
+  });
+}
+
+/** Load a previously saved draft for a job. Returns null if none exists. */
+export async function fetchInspectionDraft(jobId: string): Promise<InspectionDraft | null> {
+  const snap = await getDoc(doc(db, 'inspection_drafts', jobId));
+  return snap.exists() ? (snap.data() as InspectionDraft) : null;
+}
+
+/** Remove the draft once the inspection has been fully submitted. */
+export async function deleteInspectionDraft(jobId: string): Promise<void> {
+  await deleteDoc(doc(db, 'inspection_drafts', jobId));
 }
 
 /**

@@ -13,6 +13,11 @@ import MechanicAvatar from '@/components/MechanicAvatar';
 import { toast } from 'sonner';
 import { getUserProfile, updateUserByAdmin, fetchMechanicStats, fetchJobsByMechanic } from '@/lib/firestore';
 import { User as UserType, JobCard } from '@/types';
+import {
+  AlertDialog, AlertDialogAction, AlertDialogCancel,
+  AlertDialogContent, AlertDialogDescription, AlertDialogFooter,
+  AlertDialogHeader, AlertDialogTitle,
+} from '@/components/ui/alert-dialog';
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Helpers
@@ -64,6 +69,7 @@ const ProfilePage = () => {
   const { user: currentUser, logout, updateUser } = useAuth();
   const navigate = useNavigate();
   const queryClient = useQueryClient();
+  const [signOutOpen, setSignOutOpen] = useState(false);
 
   // Present when admin navigates to /admin/users/:userId
   const { userId: targetUserId } = useParams<{ userId?: string }>();
@@ -189,7 +195,7 @@ const ProfilePage = () => {
     adminSaveMutation.mutate({ role: roleInput });
   };
 
-  const handleAvatarChange = (v: '1' | '2') => {
+  const handleAvatarChange = (v: '1' | '2' | '3' | '4' | '5') => {
     adminSaveMutation.mutate({ avatarVariant: v });
   };
 
@@ -555,12 +561,33 @@ const ProfilePage = () => {
 
         {/* Sign out — only on own profile */}
         {isSelf && (
-          <button
-            onClick={() => { logout(); navigate('/'); }}
-            className="mt-4 w-full flex items-center justify-center gap-2 px-4 py-3 rounded-xl border border-border text-sm font-semibold text-muted-foreground hover:bg-muted transition-colors"
-          >
-            Sign out
-          </button>
+          <>
+            <button
+              onClick={() => setSignOutOpen(true)}
+              className="mt-4 w-full flex items-center justify-center gap-2 px-4 py-3 rounded-xl border border-border text-sm font-semibold text-muted-foreground hover:bg-muted transition-colors"
+            >
+              Sign out
+            </button>
+            <AlertDialog open={signOutOpen} onOpenChange={setSignOutOpen}>
+              <AlertDialogContent className="max-w-sm">
+                <AlertDialogHeader>
+                  <AlertDialogTitle>Sign out?</AlertDialogTitle>
+                  <AlertDialogDescription>
+                    You'll be returned to the login screen. Any unsaved changes will be lost.
+                  </AlertDialogDescription>
+                </AlertDialogHeader>
+                <AlertDialogFooter>
+                  <AlertDialogCancel>Cancel</AlertDialogCancel>
+                  <AlertDialogAction
+                    onClick={() => { logout(); navigate('/'); }}
+                    className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+                  >
+                    Sign out
+                  </AlertDialogAction>
+                </AlertDialogFooter>
+              </AlertDialogContent>
+            </AlertDialog>
+          </>
         )}
       </div>
     </div>

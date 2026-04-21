@@ -11,7 +11,7 @@ import {
 } from 'lucide-react';
 import Navbar from '@/components/layout/Navbar';
 import CarDiagram from '@/components/inspection/CarDiagram';
-import { buildTyreOverlays, TYRE_CONDITIONS } from '@/lib/tyreUtils';
+import { buildTyreOverlays, TYRE_CONDITIONS, TYRE_POSITIONS } from '@/lib/tyreUtils';
 import { toast } from 'sonner';
 import { motion } from 'framer-motion';
 
@@ -343,7 +343,23 @@ const ReportCard = ({ report, type, photos, vehicleType = 'sedan' }: { report: I
   const [showDamageMap, setShowDamageMap] = useState(true);
   const [showSignature, setShowSignature] = useState(false);
 
-  const tyreOverlays = buildTyreOverlays(report.tire_conditions, vehicleType);
+  const tyreOverlays = (() => {
+    const base = buildTyreOverlays(report.tire_conditions, vehicleType);
+    Object.entries(base).forEach(([view, overlays]) => {
+      if (!overlays) return;
+      // Apply saved drag positions
+      overlays.forEach(ov => {
+        const pos = report.tyreAdjustments?.[ov.key]?.[view];
+        if (pos) { ov.x = pos.x; ov.y = pos.y; }
+      });
+      // When a real photo is present for this view, only keep overlays that the
+      // mechanic explicitly dragged — default SVG positions don't align with photos
+      if (photos?.[view]) {
+        base[view] = overlays.filter(ov => !!report.tyreAdjustments?.[ov.key]?.[view]);
+      }
+    });
+    return base;
+  })();
 
   const fuelLevelMap: Record<string, number> = { 'Empty': 0, '1/4': 25, '1/2': 50, '3/4': 75, 'Full': 100 };
   const fuelPercent = fuelLevelMap[report.fuel_level] ?? 50;
@@ -370,166 +386,187 @@ const ReportCard = ({ report, type, photos, vehicleType = 'sedan' }: { report: I
       initial={{ opacity: 0, y: 16 }}
       animate={{ opacity: 1, y: 0 }}
       transition={{ delay: 0.15 }}
-      className="card-elevated p-5"
+      className="card-elevated overflow-hidden"
     >
-      <div className="flex items-center justify-between mb-4">
-        <h2 className="text-sm font-semibold text-foreground flex items-center gap-2">
-          <FileText className="w-4 h-4 text-primary" />
+      {/* Header */}
+      <div className="flex items-center justify-between px-5 pt-5 pb-3 border-b border-border">
+        <h2 className="text-xs font-semibold uppercase tracking-widest text-muted-foreground flex items-center gap-2">
+          <FileText className="w-3.5 h-3.5 text-primary" />
           {type} Inspection
         </h2>
-        <span className="text-xs text-muted-foreground">
-          {formatReportDate(report.created_at)}
-        </span>
+        <span className="text-xs text-muted-foreground">{formatReportDate(report.created_at)}</span>
       </div>
 
-      {/* Odometer & Fuel */}
-      <div className="grid grid-cols-2 gap-3 mb-4">
-        <div className="bg-muted rounded-lg p-3">
-          <div className="flex items-center gap-2 text-muted-foreground mb-1">
-            <Gauge className="w-3.5 h-3.5" />
-            <span className="text-[10px] uppercase tracking-wider">Odometer</span>
-          </div>
-          <p className="text-lg font-bold font-mono text-foreground">
-            {report.odometer > 0 ? `${report.odometer.toLocaleString()} km` : 'Not recorded'}
-          </p>
-        </div>
-        <div className="bg-muted rounded-lg p-3">
-          <div className="flex items-center gap-2 text-muted-foreground mb-1">
-            <Fuel className="w-3.5 h-3.5" />
-            <span className="text-[10px] uppercase tracking-wider">Fuel Level</span>
-          </div>
-          <p className="text-lg font-bold text-foreground mb-1.5">{report.fuel_level}</p>
-          <div className="h-2 bg-background rounded-full overflow-hidden">
-            <div
-              className="h-full rounded-full transition-all duration-500"
-              style={{
-                width: `${fuelPercent}%`,
-                background: fuelPercent > 50 ? 'hsl(var(--success))' : fuelPercent > 25 ? 'hsl(var(--warning))' : 'hsl(var(--accent))',
-              }}
-            />
-          </div>
-        </div>
-      </div>
-
-      {/* Tyre Conditions */}
-      <div className="mb-4">
-        <h3 className="text-xs font-semibold text-muted-foreground uppercase tracking-wider mb-2 flex items-center gap-1.5">
-          <Circle className="w-3 h-3" />
-          Tyre &amp; Alloy Condition
-        </h3>
-        <div className="grid grid-cols-2 gap-2">
-          {Object.entries(report.tire_conditions).map(([key, value]) => {
-            const hasCondition = value && value.trim() !== '';
-            return (
-              <div key={key} className={`rounded-lg p-3 border ${hasCondition ? 'bg-muted border-border' : 'bg-accent/5 border-accent/20'}`}>
-                <div className="flex items-center gap-1.5 mb-1">
-                  <div className={`w-2 h-2 rounded-full ${hasCondition ? 'bg-success' : 'bg-accent'}`} />
-                  <p className="text-[10px] text-muted-foreground capitalize font-medium">{key.replace(/_/g, ' ')}</p>
-                </div>
-                <p className={`text-sm font-medium ${hasCondition ? 'text-foreground' : 'text-accent italic'}`}>
-                  {hasCondition
-                    ? (TYRE_CONDITIONS.find(c => c.value === value)?.label ?? value)
-                    : 'Not recorded'}
-                </p>
-              </div>
-            );
-          })}
-        </div>
-      </div>
-
-      {/* Damage Map */}
-      <div className="mb-4">
-        <div className="flex items-center justify-between mb-2">
-          <h3 className="text-xs font-semibold text-muted-foreground uppercase tracking-wider">Damage Map</h3>
-          <button
-            onClick={() => setShowDamageMap(!showDamageMap)}
-            className="text-xs text-primary hover:underline"
-          >
-            {showDamageMap ? 'Hide' : 'Show'}
-          </button>
-        </div>
-        {showDamageMap && (
-          <CarDiagram
-            damages={report.damages}
-            onAreaClick={() => {}}
-            photos={photos as any}
-            vehicleType={vehicleType as any}
-            tyreOverlays={tyreOverlays as any}
-          />
-        )}
-      </div>
-
-      {/* Damage List */}
-      {report.damages.length > 0 && (
-        <div className="space-y-2">
-          <h3 className="text-xs font-semibold text-muted-foreground uppercase tracking-wider mb-2">
-            Damage Details ({report.damages.length})
-          </h3>
-          {report.damages.map((damage, index) => (
-            <div key={index} className="rounded-lg bg-muted overflow-hidden">
-              <div className="flex items-center gap-2 px-3 py-2">
-                <div className={`w-2.5 h-2.5 rounded-full shrink-0 ${damage.severity === 'major' ? 'bg-red-500' : 'bg-amber-500'}`} />
-                <span className="text-sm text-foreground font-medium flex-1">{damage.part}</span>
-                <span className="text-xs text-muted-foreground capitalize">{damage.damage_type}</span>
-                <span className={`text-xs px-2 py-0.5 rounded ${
-                  damage.severity === 'major' ? 'bg-red-500/10 text-red-600' : 'bg-amber-500/10 text-amber-600'
-                }`}>
-                  {damage.severity}
-                </span>
-                {damage.photo_url && (
-                  <span className="text-xs text-primary flex items-center gap-1">
-                    <Image className="w-3 h-3" />
-                    Photo
-                  </span>
-                )}
-              </div>
-              {damage.photo_url && (
-                <img 
-                  src={damage.photo_url} 
-                  alt={`Damage to ${damage.part}`}
-                  className="w-full h-32 object-cover border-t border-border"
-                />
-              )}
+      <div className="p-5 space-y-5">
+        {/* Odometer & Fuel */}
+        <div className="grid grid-cols-2 gap-3">
+          <div className="bg-muted/60 rounded-xl p-3 border border-border">
+            <div className="flex items-center gap-1.5 text-muted-foreground mb-1">
+              <Gauge className="w-3.5 h-3.5" />
+              <span className="text-[10px] uppercase tracking-wider font-medium">Odometer</span>
             </div>
-          ))}
-        </div>
-      )}
-
-      {report.damages.length === 0 && (
-        <div className="flex items-center gap-2 px-3 py-2 rounded-lg bg-green-500/10">
-          <CheckCircle className="w-4 h-4 text-green-600" />
-          <span className="text-sm text-green-600 font-medium">No damage recorded</span>
-        </div>
-      )}
-
-      {/* Signature */}
-      {report.signature_url && (
-        <div className="mt-4 pt-4 border-t border-border">
-          <div className="flex items-center justify-between mb-2">
-            <h3 className="text-xs font-semibold text-muted-foreground uppercase tracking-wider">Customer Signature</h3>
-            <button
-              onClick={() => setShowSignature(v => !v)}
-              className="text-xs text-primary hover:underline"
-            >
-              {showSignature ? 'Hide' : 'View Signature'}
-            </button>
+            <p className="text-base font-bold font-mono text-foreground">
+              {report.odometer > 0 ? `${report.odometer.toLocaleString()} km` : 'Not recorded'}
+            </p>
           </div>
-          {showSignature ? (
-            <div className="border border-border rounded-lg overflow-hidden bg-white">
-              <img
-                src={report.signature_url}
-                alt="Customer signature"
-                className="w-full h-auto max-h-40 object-contain p-2"
+          <div className="bg-muted/60 rounded-xl p-3 border border-border">
+            <div className="flex items-center gap-1.5 text-muted-foreground mb-1">
+              <Fuel className="w-3.5 h-3.5" />
+              <span className="text-[10px] uppercase tracking-wider font-medium">Fuel Level</span>
+            </div>
+            <p className="text-base font-bold text-foreground mb-1.5">{report.fuel_level ?? 'N/A'}</p>
+            <div className="h-1.5 bg-background rounded-full overflow-hidden">
+              <div
+                className="h-full rounded-full transition-all duration-500"
+                style={{
+                  width: `${fuelPercent}%`,
+                  background: fuelPercent > 50 ? 'hsl(var(--success))' : fuelPercent > 25 ? 'hsl(var(--warning))' : 'hsl(var(--accent))',
+                }}
               />
             </div>
-          ) : (
-            <div className="flex items-center gap-2 px-3 py-2 rounded-lg bg-green-500/10">
-              <CheckCircle className="w-4 h-4 text-green-600" />
-              <span className="text-sm text-green-600 font-medium">Signature captured</span>
-            </div>
+          </div>
+        </div>
+
+        {/* Tyre Conditions — colour-coded badges matching condition colours */}
+        <div>
+          <h3 className="text-xs font-semibold uppercase tracking-widest text-muted-foreground mb-3">
+            Tyre &amp; Alloy Condition
+          </h3>
+          <div className="grid grid-cols-2 gap-2">
+            {TYRE_POSITIONS.map(({ key, label }) => {
+              const value = report.tire_conditions[key as keyof typeof report.tire_conditions];
+              const condition = TYRE_CONDITIONS.find(c => c.value === value);
+              return (
+                <div key={key} className="rounded-xl p-3 border border-border bg-card flex items-center justify-between gap-2">
+                  <div>
+                    <p className="text-[10px] text-muted-foreground font-medium mb-0.5">{label}</p>
+                    <p className="text-sm font-semibold text-foreground">
+                      {condition?.label ?? <span className="italic text-muted-foreground font-normal">Not recorded</span>}
+                    </p>
+                  </div>
+                  {condition && (
+                    <span
+                      className="shrink-0 text-[10px] font-bold px-2 py-0.5 rounded-full border"
+                      style={{ background: condition.bg, color: condition.color, borderColor: condition.border }}
+                    >
+                      {condition.label}
+                    </span>
+                  )}
+                </div>
+              );
+            })}
+          </div>
+        </div>
+
+        {/* Damage Map */}
+        <div>
+          <div className="flex items-center justify-between mb-2">
+            <h3 className="text-xs font-semibold uppercase tracking-widest text-muted-foreground">Damage Map</h3>
+            <button
+              onClick={() => setShowDamageMap(!showDamageMap)}
+              className="text-xs font-medium text-primary hover:underline"
+            >
+              {showDamageMap ? 'Hide' : 'Show'}
+            </button>
+          </div>
+          {showDamageMap && (
+            <CarDiagram
+              damages={report.damages}
+              onAreaClick={() => {}}
+              photos={photos as any}
+              vehicleType={vehicleType as any}
+              tyreOverlays={tyreOverlays as any}
+            />
           )}
         </div>
-      )}
+
+        {/* Damage list — same style as mechanic view */}
+        {report.damages.length > 0 ? (
+          <div className="rounded-lg border border-border overflow-hidden">
+            <div className="px-3 py-2 bg-muted/60 border-b border-border flex items-center justify-between">
+              <span className="text-[10px] font-bold uppercase tracking-widest text-muted-foreground">Logged Damages</span>
+              <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-destructive/10 text-destructive border border-destructive/20">
+                {report.damages.length} item{report.damages.length > 1 ? 's' : ''}
+              </span>
+            </div>
+            <div className="divide-y divide-border">
+              {report.damages.map((d, i) => (
+                <div key={i} className="flex items-center justify-between px-3 py-2.5 bg-card gap-3">
+                  <div className="flex items-center gap-2 min-w-0 flex-1">
+                    <Car className="w-3.5 h-3.5 text-muted-foreground shrink-0" />
+                    <span className="text-sm font-semibold text-foreground truncate">{d.part}</span>
+                    <span className="text-xs text-muted-foreground capitalize shrink-0">
+                      {d.damage_type}{d.view ? ` · ${d.view} view` : ''}
+                    </span>
+                  </div>
+                  <span
+                    className="shrink-0 text-[10px] font-bold px-2 py-0.5 rounded-full capitalize border"
+                    style={
+                      d.severity === 'major'
+                        ? { background: 'hsl(var(--destructive)/0.1)', color: 'hsl(var(--destructive))', borderColor: 'hsl(var(--destructive)/0.3)' }
+                        : { background: 'hsl(var(--warning)/0.1)', color: 'hsl(var(--warning))', borderColor: 'hsl(var(--warning)/0.3)' }
+                    }
+                  >
+                    {d.severity}
+                  </span>
+                  {d.photo_url && (
+                    <span className="text-[10px] text-primary flex items-center gap-1 shrink-0">
+                      <Image className="w-3 h-3" /> Photo
+                    </span>
+                  )}
+                </div>
+              ))}
+            </div>
+            {/* Inline damage photos */}
+            {report.damages.some(d => d.photo_url) && (
+              <div className="border-t border-border divide-y divide-border">
+                {report.damages.filter(d => d.photo_url).map((d, i) => (
+                  <img
+                    key={i}
+                    src={d.photo_url}
+                    alt={`Damage to ${d.part}`}
+                    className="w-full h-32 object-cover"
+                  />
+                ))}
+              </div>
+            )}
+          </div>
+        ) : (
+          <div className="flex items-center gap-2 px-3 py-2.5 rounded-lg bg-success/10 border border-success/20">
+            <CheckCircle className="w-4 h-4 text-success" />
+            <span className="text-sm text-success font-medium">No damage recorded</span>
+          </div>
+        )}
+
+        {/* Customer Signature */}
+        {report.signature_url && (
+          <div className="border-t border-border pt-4">
+            <div className="flex items-center justify-between mb-2">
+              <h3 className="text-xs font-semibold uppercase tracking-widest text-muted-foreground">Customer Signature</h3>
+              <button
+                onClick={() => setShowSignature(v => !v)}
+                className="text-xs font-medium text-primary hover:underline"
+              >
+                {showSignature ? 'Hide' : 'View Signature'}
+              </button>
+            </div>
+            {showSignature ? (
+              <div className="border border-border rounded-xl overflow-hidden bg-white">
+                <img
+                  src={report.signature_url}
+                  alt="Customer signature"
+                  className="w-full h-auto max-h-40 object-contain p-2"
+                />
+              </div>
+            ) : (
+              <div className="flex items-center gap-2 px-3 py-2.5 rounded-lg bg-success/10 border border-success/20">
+                <CheckCircle className="w-4 h-4 text-success" />
+                <span className="text-sm text-success font-medium">Signature captured</span>
+              </div>
+            )}
+          </div>
+        )}
+      </div>
     </motion.div>
   );
 };

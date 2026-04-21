@@ -13,7 +13,7 @@ import Vehicle3DModel from '@/components/vehicle-3d/Vehicle3DModelWrapper';
 import { ErrorBoundary } from '@/components/layout/ErrorBoundary';
 import DamageModal from '@/components/inspection/DamageModal';
 import { toast } from 'sonner';
-import { saveInspectionReport, updateJobCardStatus, fetchJobCardById, fetchJobPhotos, acknowledgeNudgesForJob } from '@/lib/firestore';
+import { saveInspectionReport, updateJobCardStatus, fetchJobCardById, fetchJobPhotos, acknowledgeNudgesForJob, saveInspectionDraft, fetchInspectionDraft, deleteInspectionDraft, InspectionDraft } from '@/lib/firestore';
 import { vehicleViewSVGs, VehicleType } from '@/components/inspection/VehicleSVGs';
 
 const formatDateTime = (iso: string) => {
@@ -77,6 +77,18 @@ const InspectionView = () => {
   // Mechanic-adjusted tyre dot positions — override computed defaults when dragged
   const [tyreAdjustments, setTyreAdjustments] = useState<Record<string, Partial<Record<string, { x: number; y: number }>>>>({});
   const { isDark, toggle: toggleTheme } = useTheme();
+  // Timer ref for debounced auto-save — avoids excessive Firestore writes on rapid changes
+  const autoSaveTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  // Track whether draft has been restored — prevents double-apply on StrictMode double-invoke
+  const draftRestoredRef = useRef(false);
+
+  // Load persisted draft for this job (survives navigation / page refresh)
+  const { data: existingDraft } = useQuery<InspectionDraft | null>({
+    queryKey: ['inspection_draft', id],
+    queryFn: () => fetchInspectionDraft(id!),
+    enabled: !!id,
+    staleTime: Infinity,
+  });
 
   // Sync vehicle type from loaded job so the diagram matches the actual car
   useEffect(() => {
@@ -84,6 +96,53 @@ const InspectionView = () => {
       setVehicleType(job.vehicle_type as typeof vehicleType);
     }
   }, [job]);
+
+  // Pre-fill customer name from the job card — mechanic can still edit it.
+  // Only seeds if the field is still empty (draft restore or manual entry takes priority).
+  useEffect(() => {
+    if (job?.customer_name && customerName === '') {
+      setCustomerName(job.customer_name);
+    }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [job?.customer_name]);
+
+  // Restore draft state once — only when draft loads AND tires are still empty (fresh open)
+  useEffect(() => {
+    if (!existingDraft || draftRestoredRef.current) return;
+    const anyTireFilled = Object.values(tires).some(v => v !== '');
+    if (anyTireFilled) return; // mechanic already started entering data — don't overwrite
+    draftRestoredRef.current = true;
+    if (existingDraft.tires) setTires(existingDraft.tires);
+    if (existingDraft.damages?.length) setDamages(existingDraft.damages);
+    if (existingDraft.tyreAdjustments && Object.keys(existingDraft.tyreAdjustments).length) {
+      setTyreAdjustments(existingDraft.tyreAdjustments);
+    }
+    if (existingDraft.customerName) setCustomerName(existingDraft.customerName);
+    toast.info('Previous work restored — pick up where you left off.');
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [existingDraft]);
+
+  // Debounced auto-save — writes draft 2 s after last change to avoid excess Firestore writes
+  useEffect(() => {
+    if (!id) return;
+    // Don't auto-save if nothing has been entered yet
+    const hasData = Object.values(tires).some(v => v !== '') || damages.length > 0 || customerName.trim() !== '';
+    if (!hasData) return;
+    if (autoSaveTimerRef.current) clearTimeout(autoSaveTimerRef.current);
+    autoSaveTimerRef.current = setTimeout(() => {
+      saveInspectionDraft(id, {
+        job_card_id: id,
+        tires,
+        damages,
+        tyreAdjustments,
+        customerName,
+      }).catch(() => {}); // non-blocking
+    }, 2000);
+    return () => {
+      if (autoSaveTimerRef.current) clearTimeout(autoSaveTimerRef.current);
+    };
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [tires, damages, tyreAdjustments, customerName, id]);
 
   // Mark job as in_progress as soon as mechanic opens the inspection form
   useEffect(() => {
@@ -203,6 +262,7 @@ const InspectionView = () => {
       inspection_type: 'pre_service',
       tire_conditions: tires,
       damages,
+      tyreAdjustments: Object.keys(tyreAdjustments).length > 0 ? tyreAdjustments : undefined,
       mechanic_name: user?.name,
       mechanic_signature_url: mechanicSig,
       mechanic_signed_at: mechanicSig ? (mechanicSignedAt ?? now) : undefined,
@@ -216,6 +276,8 @@ const InspectionView = () => {
     try {
       await saveInspectionReport(report);
       await updateJobCardStatus(id!, 'completed');
+      // Clean up the draft — job is now fully submitted
+      deleteInspectionDraft(id!).catch(() => {});
       acknowledgeNudgesForJob(id!, 'Inspection submitted & job completed').catch(() => {});
       queryClient.invalidateQueries({ queryKey: ['jobs'] });
       toast.success('Inspection submitted and saved!');
@@ -442,24 +504,70 @@ const InspectionView = () => {
               />
             )}
 
-            {/* Damage list */}
-            {damages.length > 0 && (
-              <div className="mt-4 space-y-2">
-                <p className="text-xs font-semibold uppercase tracking-widest text-muted-foreground">Logged Damages ({damages.length})</p>
-                {damages.map((d, i) => (
-                  <div key={i} className="flex items-center justify-between px-3 py-2.5 rounded-lg bg-muted">
-                    <div className="min-w-0 flex-1">
-                      <span className="text-sm font-semibold text-foreground">{d.part}</span>
-                      <span className="text-xs text-muted-foreground ml-2 capitalize">{d.damage_type} · {d.severity} · {d.view || 'top'} view</span>
+            {/* Inspection summary — tyre conditions + damages */}
+            {(Object.values(tires).some(v => v !== '') || damages.length > 0) && (
+              <div className="mt-4 space-y-3">
+                <p className="text-xs font-semibold uppercase tracking-widest text-muted-foreground">Inspection Summary</p>
+
+                {/* Tyre conditions */}
+                {Object.values(tires).some(v => v !== '') && (
+                  <div className="rounded-lg border border-border overflow-hidden">
+                    <div className="px-3 py-2 bg-muted/60 border-b border-border">
+                      <span className="text-[10px] font-bold uppercase tracking-widest text-muted-foreground">Wheel Conditions</span>
                     </div>
-                    <button
-                      onClick={() => handleRemoveDamage(i)}
-                      className="ml-3 flex-shrink-0 p-1.5 rounded-lg text-destructive hover:bg-destructive/10 transition-colors"
-                    >
-                      <Trash2 className="w-3.5 h-3.5" />
-                    </button>
+                    <div className="grid grid-cols-2 divide-x divide-y divide-border">
+                      {TYRE_POSITIONS.map(({ key, label }) => {
+                        const val = tires[key as keyof typeof tires];
+                        const condition = TYRE_CONDITIONS.find(c => c.value === val);
+                        return (
+                          <div key={key} className="flex items-center justify-between px-3 py-2.5 bg-card">
+                            <span className="text-xs text-muted-foreground">{label}</span>
+                            {condition ? (
+                              <span
+                                className="text-[11px] font-bold px-2 py-0.5 rounded-full"
+                                style={{ background: condition.bg, color: condition.color, border: `1px solid ${condition.border}` }}
+                              >
+                                {condition.label}
+                              </span>
+                            ) : (
+                              <span className="text-[11px] text-muted-foreground italic">Not set</span>
+                            )}
+                          </div>
+                        );
+                      })}
+                    </div>
                   </div>
-                ))}
+                )}
+
+                {/* Damage entries */}
+                {damages.length > 0 && (
+                  <div className="rounded-lg border border-border overflow-hidden">
+                    <div className="px-3 py-2 bg-muted/60 border-b border-border flex items-center justify-between">
+                      <span className="text-[10px] font-bold uppercase tracking-widest text-muted-foreground">Logged Damages</span>
+                      <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-destructive/10 text-destructive border border-destructive/20">
+                        {damages.length} item{damages.length > 1 ? 's' : ''}
+                      </span>
+                    </div>
+                    <div className="divide-y divide-border">
+                      {damages.map((d, i) => (
+                        <div key={i} className="flex items-center justify-between px-3 py-2.5 bg-card">
+                          <div className="min-w-0 flex-1">
+                            <span className="text-sm font-semibold text-foreground">{d.part}</span>
+                            <span className="text-xs text-muted-foreground ml-2 capitalize">
+                              {d.damage_type} · {d.severity} · {d.view || 'top'} view
+                            </span>
+                          </div>
+                          <button
+                            onClick={() => handleRemoveDamage(i)}
+                            className="ml-3 flex-shrink-0 p-1.5 rounded-lg text-destructive hover:bg-destructive/10 transition-colors"
+                          >
+                            <Trash2 className="w-3.5 h-3.5" />
+                          </button>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                )}
               </div>
             )}
           </div>

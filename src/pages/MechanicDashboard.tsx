@@ -339,7 +339,7 @@ const MechanicDashboard = () => {
                   <div className="-mt-10 mb-2 relative w-20 h-20">
                     <div className="w-20 h-20 rounded-2xl overflow-hidden shadow-xl border-[3px] border-card bg-card">
                       <img
-                        src="/mechanic1.png"
+                        src={['1','2'].includes(user?.avatarVariant ?? '1') ? `/mechanic${user?.avatarVariant ?? '1'}.png` : `/mechenic${user?.avatarVariant ?? '1'}.png`}
                         alt="Mechanic"
                         className="w-full h-full object-cover object-top"
                         draggable={false}
