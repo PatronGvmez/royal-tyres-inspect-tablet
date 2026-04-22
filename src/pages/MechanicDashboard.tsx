@@ -18,6 +18,42 @@ import VehicleCardCarousel from '@/components/VehicleCardCarousel';
 import MechanicAvatar from '@/components/MechanicAvatar';
 import RoyalTyresIcon from '@/components/RoyalTyresIcon';
 import { toast } from 'sonner';
+import { useTour } from '@/hooks/use-tour';
+import type { TourStep } from '@/hooks/use-tour';
+import AppTour from '@/components/AppTour';
+
+const MECHANIC_TOUR_STEPS: TourStep[] = [
+  {
+    targetId: 'mechanic-profile-card',
+    title: 'Your Profile Card',
+    description: 'This is your personal workspace. Your name, date, and live queue summary are shown here.',
+    placement: 'right',
+  },
+  {
+    targetId: 'add-new-car-btn',
+    title: 'Add a New Car',
+    description: 'Tap here to register a new vehicle for inspection. You can enter the customer name, license plate, vehicle type and service details.',
+    placement: 'right',
+  },
+  {
+    targetId: 'mechanic-stats',
+    title: 'Your Job Stats',
+    description: 'A quick snapshot of your workload — booked jobs, active inspections, and completed jobs.',
+    placement: 'right',
+  },
+  {
+    targetId: 'search-filter-bar',
+    title: 'Search & Filter',
+    description: 'Search by customer name, license plate or job ID. Use the tabs to filter by status: All, My Jobs, Booked, In Progress, or Completed.',
+    placement: 'bottom',
+  },
+  {
+    targetId: 'incoming-jobs-section',
+    title: 'Incoming Jobs',
+    description: 'These are newly booked jobs available for any mechanic to claim. Tap a card and start by uploading photos of the vehicle.',
+    placement: 'top',
+  },
+];
 
 const today = new Date().toLocaleDateString('en-ZA', {
   weekday: 'long', day: 'numeric', month: 'long',
@@ -121,6 +157,8 @@ const MechanicDashboard = () => {
   const { user, logout } = useAuth();
   const navigate = useNavigate();
   const queryClient = useQueryClient();
+
+  const tour = useTour('mechanic', MECHANIC_TOUR_STEPS);
 
   const [showAddModal, setShowAddModal] = useState(false);
   const [selectedCompleted, setSelectedCompleted] = useState<JobCard | null>(null);
@@ -289,6 +327,7 @@ const MechanicDashboard = () => {
         onDismissNudge={(id) => dismissNudgeMutation.mutate(id)}
         onAcknowledgeNudge={(id) => acknowledgeNudgeMutation.mutate(id)}
         showProfile
+        onStartTour={tour.startTour}
       />
 
       <div className="max-w-6xl mx-auto px-4 sm:px-6 lg:px-8">
@@ -306,7 +345,7 @@ const MechanicDashboard = () => {
             <aside className="lg:sticky lg:top-20 lg:self-start space-y-3 mb-6 lg:mb-0">
 
               {/* Profile Card */}
-              <div className="card-elevated overflow-hidden">
+              <div id="mechanic-profile-card" className="card-elevated overflow-hidden">
                 {/* Hero banner — dark navy grid background with mechanic character */}
                 <div className="h-32 relative overflow-hidden" style={{
                   background: '#c8d6f0',
@@ -376,6 +415,7 @@ const MechanicDashboard = () => {
                   </div>
 
                   <button
+                    id="add-new-car-btn"
                     onClick={() => setShowAddModal(true)}
                     className="mt-3 w-full flex items-center justify-center gap-2 px-4 py-2.5 rounded-xl bg-primary text-primary-foreground text-sm font-semibold hover:opacity-90 active:scale-[.98] transition-all shadow-sm"
                   >
@@ -386,7 +426,7 @@ const MechanicDashboard = () => {
               </div>
 
               {/* Stats — 3 cards */}
-              <div className="grid grid-cols-3 gap-2">
+              <div id="mechanic-stats" className="grid grid-cols-3 gap-2">
                 {[
                   { label: 'Booked',      value: bookedCount,           icon: ClipboardCheck, bg: 'bg-primary/10',   text: 'text-primary' },
                   { label: 'In Progress', value: inProgressCount,        icon: Clock,          bg: 'bg-warning/10',   text: 'text-warning' },
@@ -424,7 +464,7 @@ const MechanicDashboard = () => {
             <main className="space-y-8 min-w-0">
 
               {/* ── Search + Filter Bar ── */}
-              <div className="card-elevated overflow-hidden">
+              <div id="search-filter-bar" className="card-elevated overflow-hidden">
                 {/* Search row */}
                 <div className="px-4 pt-4 pb-3 border-b border-border">
                   <div className="relative">
@@ -505,7 +545,7 @@ const MechanicDashboard = () => {
 
               {/* ── Incoming Booked Jobs — visible to all mechanics ── */}
               {showAvailableSection && (
-                <section>
+                <section id="incoming-jobs-section">
                   {/* Section header */}
                   <div className="flex items-center justify-between mb-4">
                     <h2 className="text-xs font-semibold uppercase tracking-widest text-muted-foreground">Incoming Jobs</h2>
@@ -1187,6 +1227,16 @@ const MechanicDashboard = () => {
           </div>
         </div>
       )}
+
+      <AppTour
+        isOpen={tour.isOpen}
+        step={tour.currentStep}
+        stepIdx={tour.stepIdx}
+        totalSteps={tour.totalSteps}
+        onNext={tour.next}
+        onPrev={tour.prev}
+        onSkip={tour.skip}
+      />
     </div>
   );
 };

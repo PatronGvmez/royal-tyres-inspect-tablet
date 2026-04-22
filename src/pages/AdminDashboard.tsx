@@ -10,6 +10,36 @@ import Navbar from '@/components/layout/Navbar';
 import { vehicleViewSVGs, VehicleType } from '@/components/inspection/VehicleSVGs';
 import VehicleCardCarousel from '@/components/VehicleCardCarousel';
 import { toast } from 'sonner';
+import { useTour } from '@/hooks/use-tour';
+import type { TourStep } from '@/hooks/use-tour';
+import AppTour from '@/components/AppTour';
+
+const ADMIN_TOUR_STEPS: TourStep[] = [
+  {
+    targetId: 'job-board-header',
+    title: 'The Job Board',
+    description: 'Welcome to your command centre. Here you can see all jobs in the workshop and take action on any of them.',
+    placement: 'bottom',
+  },
+  {
+    targetId: 'admin-users-btn',
+    title: 'User Management',
+    description: 'Tap here to manage mechanic accounts — add new mechanics, change roles, or remove users.',
+    placement: 'bottom',
+  },
+  {
+    targetId: 'admin-column-tabs',
+    title: 'Job Status Columns',
+    description: 'Filter the board by job status: Booked (waiting), In Progress (active inspections), and Completed. Tap any tab to focus on that stage.',
+    placement: 'bottom',
+  },
+  {
+    targetId: 'admin-view-toggle',
+    title: 'Grid & List Views',
+    description: 'Switch between a visual grid view (great for photo-rich jobs) and a compact list view for a faster overview.',
+    placement: 'bottom',
+  },
+];
 
 /** Returns 3-step workflow state for a job card. */
 const getWorkflowSteps = (job: JobCard, hasPhotos: boolean) => [
@@ -40,6 +70,9 @@ const AdminDashboard = () => {
   const { user, logout } = useAuth();
   const navigate = useNavigate();
   const queryClient = useQueryClient();
+
+  const tour = useTour('admin', ADMIN_TOUR_STEPS);
+
   const [nudgeJob, setNudgeJob] = useState<JobCard | null>(null);
   const [nudgeMessage, setNudgeMessage] = useState('');
   const [nudgeHistory, setNudgeHistory] = useState<Nudge[]>([]);
@@ -137,12 +170,13 @@ const AdminDashboard = () => {
         onLogout={() => { logout(); navigate('/'); }}
         maxWidth="max-w-7xl"
         showProfile
+        onStartTour={tour.startTour}
       />
 
       {/* Kanban Board */}
       <div className="pt-4 sm:pt-6 max-w-7xl mx-auto">
         {/* Header — fixed padding */}
-        <div className="flex items-center justify-between mb-4 px-4 sm:px-6">
+        <div id="job-board-header" className="flex items-center justify-between mb-4 px-4 sm:px-6">
           <h2 className="text-xl font-display font-bold text-foreground">Job Board</h2>
           <div className="flex items-center gap-2">
             <button
@@ -154,6 +188,7 @@ const AdminDashboard = () => {
               <span className="hidden sm:inline">Clear Data</span>
             </button>
             <button
+              id="admin-users-btn"
               onClick={() => navigate('/admin/users')}
               className="flex items-center gap-2 px-3 py-2 rounded-lg bg-muted text-sm text-muted-foreground hover:bg-secondary transition-colors"
             >
@@ -171,7 +206,7 @@ const AdminDashboard = () => {
             {/* ── MOBILE (< md): Tab navigation + single-column view ── */}
             <div className="md:hidden">
               {/* Column tab pills */}
-              <div className="flex gap-2 overflow-x-auto pb-3 px-4">
+              <div id="admin-column-tabs" className="flex gap-2 overflow-x-auto pb-3 px-4">
                 {columns.map(col => {
                   const count = getJobsByStatus(col.status).length;
                   const isActive = activeColumn === col.status;
@@ -197,7 +232,7 @@ const AdminDashboard = () => {
               </div>
 
               {/* Section title + view toggle */}
-              <div className="flex items-center justify-between px-4 py-2">
+              <div id="admin-view-toggle" className="flex items-center justify-between px-4 py-2">
                 <div className="flex items-center gap-2">
                   <span className={`status-badge text-xs ${statusClass[activeColumn]}`}>
                     {columns.find(c => c.status === activeColumn)?.label}
@@ -713,6 +748,16 @@ const AdminDashboard = () => {
           </div>
         </div>
       )}
+
+      <AppTour
+        isOpen={tour.isOpen}
+        step={tour.currentStep}
+        stepIdx={tour.stepIdx}
+        totalSteps={tour.totalSteps}
+        onNext={tour.next}
+        onPrev={tour.prev}
+        onSkip={tour.skip}
+      />
     </div>
   );
 };

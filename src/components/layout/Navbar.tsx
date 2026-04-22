@@ -1,5 +1,5 @@
 import { useState, useRef, useEffect } from 'react';
-import { LogOut, Sun, Moon, Bell, X, User, CheckCircle2 } from 'lucide-react';
+import { LogOut, Sun, Moon, Bell, X, User, CheckCircle2, HelpCircle } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 import { useTheme } from '@/hooks/use-theme';
 import RoyalTyresIcon from '@/components/RoyalTyresIcon';
@@ -30,6 +30,8 @@ interface NavbarProps {
   onAcknowledgeNudge?: (id: string) => void;
   /** Pass true to show the avatar profile nav link */
   showProfile?: boolean;
+  /** Called when the user clicks the tour help button */
+  onStartTour?: () => void;
 }
 
 const Navbar = ({
@@ -41,6 +43,7 @@ const Navbar = ({
   onDismissNudge,
   onAcknowledgeNudge,
   showProfile = false,
+  onStartTour,
 }: NavbarProps) => {
   const navigate = useNavigate();
   const { isDark, toggle } = useTheme();
@@ -225,6 +228,18 @@ const Navbar = ({
           >
             {isDark ? <Sun className="w-4 h-4" /> : <Moon className="w-4 h-4" />}
           </button>
+
+          {/* Tour help button */}
+          {onStartTour && (
+            <button
+              id="tour-help-btn"
+              onClick={onStartTour}
+              className="p-2 rounded-lg text-muted-foreground hover:bg-muted transition-colors"
+              title="Start guided tour"
+            >
+              <HelpCircle className="w-4 h-4" />
+            </button>
+          )}
 
           <button
             onClick={handleLogoutClick}
