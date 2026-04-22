@@ -28,6 +28,10 @@ dist-ssr
 .env.local
 .env.*.local
 
+# Documentation files (keep locally, not needed in repo)
+*.md
+!README.md
+
 # Firebase service account keys (sensitive credentials)
 *firebase-adminsdk*.json
 *service-account*.json
