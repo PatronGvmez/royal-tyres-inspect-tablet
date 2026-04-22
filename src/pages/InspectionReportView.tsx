@@ -47,7 +47,6 @@ const InspectionReportView: React.FC = () => {
   const { data: photos = {} } = useQuery({
     queryKey: ['job_photos', id],
     queryFn: () => fetchJobPhotos(id!),
-    staleTime: Infinity,
     enabled: !!id,
   });
 
