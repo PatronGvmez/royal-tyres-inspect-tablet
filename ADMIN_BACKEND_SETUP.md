@@ -294,7 +294,7 @@ app.listen(PORT, () => {
 ```env
 PORT=3001
 CLIENT_URL=http://localhost:3333
-FIREBASE_PROJECT_ID=royaltyersapp
+FIREBASE_PROJECT_ID=your_project_id
 NODE_ENV=development
 ```
 
