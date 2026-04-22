@@ -3,7 +3,7 @@
  * Server-side admin functions using Firebase Admin SDK
  * 
  * NOTE: These operations require the Firebase Admin SDK service account
- * Service account file: royaltyersapp-firebase-adminsdk-fbsvc-406c1fbf93.json
+ * Service account file: your_project_id-firebase-adminsdk-fbsvc-xxxxxxxxxxxx.json
  * 
  * In production, these should run on a backend server (Node.js/Express)
  * Never expose the service account private key in client-side code!
