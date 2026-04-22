@@ -152,7 +152,6 @@ const MechanicDashboard = () => {
   const { data: allPhotos = {} } = useQuery({
     queryKey: ['all_job_photos'],
     queryFn: fetchAllJobPhotos,
-    staleTime: 60_000,
   });
   // Convenience: front-only map for backward compat (hasPhotos checks)
   const frontPhotos: Record<string, string> = {};

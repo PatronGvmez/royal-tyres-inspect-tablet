@@ -220,8 +220,9 @@ const PhotoUploadPage = () => {
     try {
       await saveJobPhotos(id!, photos);
       acknowledgeNudgesForJob(id!, 'Photos uploaded').catch(() => {});
-      // Invalidate so the dashboard re-fetches and shows the new front photo
-      queryClient.invalidateQueries({ queryKey: ['all_job_front_photos'] });
+      // Invalidate all photo caches so dashboards and detail views refresh immediately
+      queryClient.invalidateQueries({ queryKey: ['all_job_photos'] });
+      queryClient.invalidateQueries({ queryKey: ['job_photos', id] });
     } catch {
       // Non-fatal — photos still passed via navigation state for this session
       toast.warning('Could not sync photos to server — they will be available for this session only.');
