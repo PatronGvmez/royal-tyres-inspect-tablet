@@ -212,3 +212,55 @@ html { font-size: 16px; }
     background: hsl(var(--muted-foreground) / 0.4);
   }
 }
+
+/* ─── Portrait-mode rotation prompt ─────────────────────────────────────────
+   Shown on any phone or tablet (≤1024 px wide) held in portrait orientation.
+   The overlay sits above all app content and asks the user to rotate.
+   Hidden automatically the moment the device enters landscape.               */
+@media (orientation: portrait) and (max-width: 1024px) {
+  #portrait-overlay {
+    display: flex !important;
+  }
+}
+
+#portrait-overlay {
+  display: none;
+  position: fixed;
+  inset: 0;
+  z-index: 99999;
+  background: hsl(225 35% 7%);
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 1.5rem;
+  padding: 2rem;
+  text-align: center;
+}
+
+#portrait-overlay svg {
+  width: 72px;
+  height: 72px;
+  color: hsl(225 55% 45%);
+  animation: rotatePulse 2s ease-in-out infinite;
+}
+
+#portrait-overlay p.title {
+  font-family: 'Space Grotesk', sans-serif;
+  font-size: 1.25rem;
+  font-weight: 600;
+  color: hsl(220 10% 95%);
+  margin: 0;
+}
+
+#portrait-overlay p.subtitle {
+  font-size: 0.875rem;
+  color: hsl(220 10% 55%);
+  margin: 0;
+}
+
+@keyframes rotatePulse {
+  0%   { transform: rotate(0deg);   opacity: 1; }
+  40%  { transform: rotate(90deg);  opacity: 0.7; }
+  60%  { transform: rotate(90deg);  opacity: 1; }
+  100% { transform: rotate(90deg);  opacity: 1; }
+}
