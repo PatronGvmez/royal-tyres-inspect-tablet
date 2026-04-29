@@ -21,9 +21,8 @@ function getFirebaseErrorMessage(code: string, message?: string): string {
     case 'auth/weak-password':         return 'Password must be at least 6 characters';
     case 'auth/user-disabled':         return 'This account has been disabled';
     case 'auth/too-many-requests':     return 'Too many failed attempts — try again later';
-    case 'auth/popup-closed-by-user':  return '';
     case 'auth/network-request-failed': return 'Network error — check your connection';
-    case 'auth/operation-not-supported-in-this-environment': return 'Google Sign-in is not available (popups may be blocked)';
+    case 'auth/no-profile':            return 'Account not set up yet. Contact your administrator.';
     default:                           return message || 'Something went wrong — please try again';
   }
 }
@@ -118,7 +117,7 @@ const LoginPage = () => {
       if (mode === 'signup') await signUpWithEmail(name.trim(), email.trim(), password);
       else await loginWithEmail(email.trim(), password);
     } catch (err: any) {
-      const msg = getFirebaseErrorMessage(err.code ?? '');
+      const msg = getFirebaseErrorMessage(err.code ?? '', err.message);
       if (msg) setError(msg);
       setErrorCode(err.code ?? null);
     } finally { setIsSubmitting(false); }

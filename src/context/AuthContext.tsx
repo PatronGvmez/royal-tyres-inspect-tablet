@@ -8,7 +8,30 @@ import {
 } from 'firebase/auth';
 import { auth, firebaseConfigured } from '@/lib/firebase';
 import { getUserProfile, createUserProfile, updateUserProfile } from '@/lib/firestore';
+import { UserModel } from '@/lib/firestoreModels';
 import { User } from '@/types';
+
+/**
+ * Resolves a user profile by UID first, then falls back to email lookup.
+ * Users created via the admin dashboard have Firestore docs keyed by an
+ * email-derived ID rather than the Firebase Auth UID. When found by email
+ * we migrate the doc to use the UID so future lookups are fast.
+ */
+async function resolveProfile(uid: string, email: string | null): Promise<User | null> {
+  // Primary: UID-keyed lookup (fast path for all sign-up created accounts)
+  const byUid = await getUserProfile(uid);
+  if (byUid) return byUid;
+
+  // Fallback: email lookup (catches admin-pre-seeded accounts)
+  if (!email) return null;
+  const byEmail = await UserModel.getByEmail(email);
+  if (!byEmail) return null;
+
+  // Migrate: write a UID-keyed doc so this fallback only runs once
+  const migrated: User = { ...byEmail, id: uid };
+  try { await createUserProfile(uid, migrated); } catch { /* ignore write errors, still let user in */ }
+  return migrated;
+}
 
 interface AuthContextType {
   user: User | null;
@@ -49,7 +72,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
       clearTimeout(timeout);
       try {
         if (firebaseUser) {
-          const profile = await getUserProfile(firebaseUser.uid);
+          const profile = await resolveProfile(firebaseUser.uid, firebaseUser.email);
           if (!profile) {
             // No Firestore profile — cannot determine role safely. Sign out.
             await signOut(auth);
@@ -74,10 +97,13 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
 
   const loginWithEmail = async (email: string, password: string) => {
     const cred = await signInWithEmailAndPassword(auth, email, password);
-    const profile = await getUserProfile(cred.user.uid);
+    const profile = await resolveProfile(cred.user.uid, cred.user.email);
     if (!profile) {
       await signOut(auth);
-      throw Object.assign(new Error('No account profile found. Contact your administrator.'), { code: 'auth/no-profile' });
+      throw Object.assign(
+        new Error('No account profile found. Contact your administrator.'),
+        { code: 'auth/no-profile' }
+      );
     }
     setUser(profile);
   };
