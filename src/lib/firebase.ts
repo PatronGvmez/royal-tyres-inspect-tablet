@@ -1,7 +1,6 @@
 import { initializeApp, type FirebaseApp } from 'firebase/app';
 import { getAuth, type Auth } from 'firebase/auth';
 import { getFirestore, type Firestore } from 'firebase/firestore';
-import { getStorage, type FirebaseStorage } from 'firebase/storage';
 
 // Load Firebase configuration from environment variables
 const firebaseConfig = {
@@ -37,20 +36,17 @@ export const firebaseConfigured = missingVars.length === 0;
 let app: FirebaseApp;
 let auth: Auth;
 let db: Firestore;
-let storage: FirebaseStorage;
 
 try {
   app = initializeApp(firebaseConfig);
   auth = getAuth(app);
   db = getFirestore(app);
-  storage = getStorage(app);
 } catch (err) {
   console.error('[Firebase] Initialization failed:', err);
   app = undefined as unknown as FirebaseApp;
   auth = undefined as unknown as Auth;
   db = undefined as unknown as Firestore;
-  storage = undefined as unknown as FirebaseStorage;
 }
 
-export { auth, db, storage };
+export { auth, db };
 export default app!;

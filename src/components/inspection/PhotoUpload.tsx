@@ -14,6 +14,35 @@ interface PhotoUploadProps {
   onRemove?: () => void;
 }
 
+/**
+ * Resize and compress an image data URL so it fits within Firestore's 1 MB document limit.
+ * Targets max 1024 px on the longest side at JPEG 0.75 quality (~80–120 KB typical output).
+ */
+function compressImage(dataUrl: string, maxDim = 1024, quality = 0.75): Promise<string> {
+  return new Promise((resolve) => {
+    const img = new Image();
+    img.onload = () => {
+      let { width, height } = img;
+      if (width > maxDim || height > maxDim) {
+        if (width >= height) {
+          height = Math.round((height / width) * maxDim);
+          width = maxDim;
+        } else {
+          width = Math.round((width / height) * maxDim);
+          height = maxDim;
+        }
+      }
+      const canvas = document.createElement('canvas');
+      canvas.width = width;
+      canvas.height = height;
+      canvas.getContext('2d')!.drawImage(img, 0, 0, width, height);
+      resolve(canvas.toDataURL('image/jpeg', quality));
+    };
+    img.onerror = () => resolve(dataUrl); // fallback: keep original if compression fails
+    img.src = dataUrl;
+  });
+}
+
 const PhotoUpload: React.FC<PhotoUploadProps> = ({
   angle,
   currentImage,
@@ -45,8 +74,9 @@ const PhotoUpload: React.FC<PhotoUploadProps> = ({
     setIsLoading(true);
     const reader = new FileReader();
 
-    reader.onload = (event) => {
-      const result = event.target?.result as string;
+    reader.onload = async (event) => {
+      const raw = event.target?.result as string;
+      const result = await compressImage(raw);
       onImageSelected(result, angle);
       setIsLoading(false);
       toast.success(`Photo uploaded for ${angle.replace('_', ' ')} view`);
@@ -80,7 +110,7 @@ const PhotoUpload: React.FC<PhotoUploadProps> = ({
     }
   };
 
-  const capturePhoto = () => {
+  const capturePhoto = async () => {
     if (!videoRef.current || !canvasRef.current) return;
 
     const context = canvasRef.current.getContext('2d');
@@ -97,7 +127,8 @@ const PhotoUpload: React.FC<PhotoUploadProps> = ({
       canvasRef.current.height
     );
 
-    const imageData = canvasRef.current.toDataURL('image/jpeg', 0.95);
+    const raw = canvasRef.current.toDataURL('image/jpeg', 0.95);
+    const imageData = await compressImage(raw);
     onImageSelected(imageData, angle);
     stopCamera();
     toast.success(`Photo captured for ${angle.replace('_', ' ')} view`);

@@ -14,7 +14,6 @@ import {
   Timestamp,
 } from 'firebase/firestore';
 import { db } from './firebase';
-import { uploadJobPhotos, upload360Photos } from './storageUtils';
 import { JobCard, InspectionReport, Inspection360, User, VehicleDamage } from '@/types';
 
 // ─── User Profiles ────────────────────────────────────────────────────────────
@@ -296,23 +295,16 @@ export async function deleteInspectionDraft(jobId: string): Promise<void> {
 }
 
 /**
- * Saves a set of per-angle vehicle photos to Firebase Storage (for persistence)
- * and records the resulting download URLs in the `job_photos` Firestore collection.
- * Stored separately from the job card to keep the jobs collection lean.
+ * Saves a set of per-angle vehicle photos (compressed base64 data URLs) to a
+ * dedicated `job_photos` collection so they survive page refreshes.
+ * Images are compressed client-side before this call so each stays well under 150 KB.
  */
 export async function saveJobPhotos(
   jobId: string,
   photos: Partial<Record<string, string>>
 ): Promise<void> {
-  // Upload base64 data to Storage; get back https:// download URLs
-  const urls = await uploadJobPhotos(jobId, photos);
-  // Only store https:// URLs in Firestore — strip any base64 fallbacks to
-  // prevent hitting the 1 MB document limit if Storage upload failed.
-  const safeUrls = Object.fromEntries(
-    Object.entries(urls).filter(([, v]) => v?.startsWith('https://'))
-  );
   await setDoc(doc(db, 'job_photos', jobId), {
-    photos: safeUrls,
+    photos,
     saved_at: serverTimestamp(),
   });
 }
@@ -361,26 +353,14 @@ export async function fetchAllJobPhotos(): Promise<Record<string, Partial<Record
 
 /**
  * Saves a 360° inspection to Firestore.
- * Images are uploaded to Firebase Storage first; only the resulting download URLs
- * are stored in Firestore, avoiding the 1 MB document limit.
+ * Images are compressed client-side before this call so the document stays under 1 MB.
  */
 export async function save360Inspection(
   inspection: Inspection360
 ): Promise<void> {
-  const { images, ...rest } = inspection;
-  // Upload images to Storage, get back https:// URLs (or fallback data URLs on error)
-  const imageUrls = Object.keys(images).length > 0
-    ? await upload360Photos(inspection.id, images as Partial<Record<string, string>>)
-    : {};
-  // Strip any fallback base64 data URLs to prevent exceeding the 1 MB Firestore doc limit.
-  // Images that failed to upload to Storage are omitted rather than stored as raw base64.
-  const safeImageUrls = Object.fromEntries(
-    Object.entries(imageUrls).filter(([, v]) => v?.startsWith('https://'))
-  );
   await setDoc(doc(db, 'inspections360', inspection.id), {
-    ...rest,
-    images: safeImageUrls,
-    has_images: Object.keys(safeImageUrls).length > 0,
+    ...inspection,
+    has_images: Object.keys(inspection.images).length > 0,
     saved_at: serverTimestamp(),
   });
 }
