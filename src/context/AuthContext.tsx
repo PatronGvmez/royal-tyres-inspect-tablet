@@ -1,4 +1,4 @@
-import React, { createContext, useContext, useState, useEffect } from 'react';
+import React, { createContext, useContext, useState, useEffect, useRef } from 'react';
 import {
   onAuthStateChanged,
   signInWithEmailAndPassword,
@@ -9,7 +9,7 @@ import {
   updateProfile,
 } from 'firebase/auth';
 import { auth, firebaseConfigured } from '@/lib/firebase';
-import { getUserProfile, createUserProfile, updateUserProfile } from '@/lib/firestore';
+import { getUserProfile, createUserProfile, updateUserProfile, updateUserByAdmin } from '@/lib/firestore';
 import { User } from '@/types';
 
 // Google OAuth provider configuration
@@ -41,6 +41,9 @@ export const useAuth = () => useContext(AuthContext);
 export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
   const [user, setUser] = useState<User | null>(null);
   const [loading, setLoading] = useState(true);
+  // Captures the role explicitly chosen at login time so onAuthStateChanged
+  // can use it as a fallback instead of hardcoding 'mechanic'.
+  const pendingLoginRole = useRef<'admin' | 'mechanic' | null>(null);
 
   useEffect(() => {
     // If Firebase was not configured (missing .env.local), skip auth listener
@@ -59,32 +62,38 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         if (firebaseUser) {
           let profile = await getUserProfile(firebaseUser.uid);
           if (!profile) {
-            // Firestore doc missing (write failed or rules blocked it) —
-            // reconstruct from Firebase Auth and re-save so it exists next time.
-            profile = {
-              id: firebaseUser.uid,
-              name: firebaseUser.displayName || firebaseUser.email?.split('@')[0] || 'User',
-              email: firebaseUser.email || '',
-              role: 'mechanic',
-            };
-            try { await createUserProfile(firebaseUser.uid, profile); } catch { /* rules may block — still let them in */ }
+            // Profile doc missing — only create it if we know the intended role
+            // (i.e. the user just logged in via loginWithEmail/loginWithGoogle).
+            // On session-restore (page refresh) we have no role signal — don't
+            // create a doc with a hardcoded 'mechanic' role that would overwrite
+            // a legitimate admin account.
+            const fallbackRole = pendingLoginRole.current ?? null;
+            if (fallbackRole) {
+              profile = {
+                id: firebaseUser.uid,
+                name: firebaseUser.displayName || firebaseUser.email?.split('@')[0] || 'User',
+                email: firebaseUser.email || '',
+                role: fallbackRole,
+              };
+              try { await createUserProfile(firebaseUser.uid, profile); } catch { /* rules may block — still let them in */ }
+            } else {
+              // Session restore but no Firestore doc — cannot determine role safely.
+              // Sign the user out so they are prompted to log in again.
+              await signOut(auth);
+              setUser(null);
+              setLoading(false);
+              return;
+            }
           }
+          pendingLoginRole.current = null;
           setUser(profile);
         } else {
           setUser(null);
         }
       } catch {
-        // Firestore totally unreachable — let Firebase Auth user through with minimal profile
-        if (firebaseUser) {
-          setUser({
-            id: firebaseUser.uid,
-            name: firebaseUser.displayName || firebaseUser.email?.split('@')[0] || 'User',
-            email: firebaseUser.email || '',
-            role: 'mechanic',
-          });
-        } else {
-          setUser(null);
-        }
+        // Firestore totally unreachable — preserve existing user state if available,
+        // otherwise sign out to avoid routing to the wrong dashboard.
+        if (!user) setUser(null);
       } finally {
         setLoading(false);
       }
@@ -97,6 +106,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     password: string,
     intendedRole: 'admin' | 'mechanic' = 'mechanic'
   ) => {
+    pendingLoginRole.current = intendedRole;
     const cred = await signInWithEmailAndPassword(auth, email, password);
     let profile = await getUserProfile(cred.user.uid);
     if (!profile) {
@@ -107,7 +117,13 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         role: intendedRole,
       };
       await createUserProfile(cred.user.uid, profile);
+    } else if (profile.role !== intendedRole) {
+      // User is logging in and explicitly selected a different role —
+      // update the stored profile so routing is correct.
+      await updateUserByAdmin(cred.user.uid, { role: intendedRole });
+      profile = { ...profile, role: intendedRole };
     }
+    pendingLoginRole.current = null;
     setUser(profile);
   };
 
@@ -131,17 +147,13 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
 
   const loginWithGoogle = async (intendedRole: 'admin' | 'mechanic' = 'mechanic') => {
     try {
-      // Add scopes for email verification
       googleProvider.addScope('email');
       googleProvider.addScope('profile');
-      
+      pendingLoginRole.current = intendedRole;
       const cred = await signInWithPopup(auth, googleProvider);
       const email = cred.user.email || '';
-      
-      // Check if user already exists in system (seeded by admin)
       let profile = await getUserProfile(cred.user.uid);
       if (!profile) {
-        // New user - create profile with intended role
         profile = {
           id: cred.user.uid,
           name: cred.user.displayName || 'Unknown',
@@ -149,9 +161,14 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
           role: intendedRole,
         };
         await createUserProfile(cred.user.uid, profile);
+      } else if (profile.role !== intendedRole) {
+        await updateUserByAdmin(cred.user.uid, { role: intendedRole });
+        profile = { ...profile, role: intendedRole };
       }
+      pendingLoginRole.current = null;
       setUser(profile);
     } catch (error: any) {
+      pendingLoginRole.current = null;
       console.error('Google auth error:', error.message || error.code);
       throw error;
     }

@@ -226,6 +226,27 @@ const LoginPage = () => {
 
             {/* Email form */}
             <form onSubmit={handleSubmit} className="space-y-3">
+              {/* Role selector — shown in both sign-in and sign-up */}
+              <div>
+                <label className={labelCls}>I am a</label>
+                <div className="flex rounded-lg border border-input overflow-hidden">
+                  <button
+                    type="button"
+                    onClick={() => setSelectedRole('mechanic')}
+                    className={`flex-1 py-2 text-sm font-medium transition ${selectedRole === 'mechanic' ? 'bg-primary text-white' : 'bg-white text-muted-foreground hover:bg-gray-50'}`}
+                  >
+                    Mechanic
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setSelectedRole('admin')}
+                    className={`flex-1 py-2 text-sm font-medium transition ${selectedRole === 'admin' ? 'bg-primary text-white' : 'bg-white text-muted-foreground hover:bg-gray-50'}`}
+                  >
+                    Admin
+                  </button>
+                </div>
+              </div>
+
               {mode === 'signup' && (
                 <div>
                   <label className={labelCls}>Full name</label>
