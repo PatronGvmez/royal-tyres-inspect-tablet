@@ -82,8 +82,6 @@ async function resolveProfile(uid: string, email: string | null): Promise<User |
   if (byUid) return { ...byUid, role: normalizeRole(byUid.role) };
   return null;
 }
-  return null;
-}
 
 interface AuthContextType {
   user: User | null;
