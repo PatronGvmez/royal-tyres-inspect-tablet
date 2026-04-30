@@ -158,33 +158,16 @@ const InspectionDetail = () => {
         maxWidth="max-w-6xl"
       />
 
-      <div className="p-4 sm:p-6 max-w-6xl mx-auto">
-        {/* Back Button */}
-        <button
-          onClick={() => navigate('/admin')}
-          className="flex items-center gap-1 text-sm text-muted-foreground hover:text-foreground mb-4 transition-colors"
-        >
-          <ChevronLeft className="w-4 h-4" />
-          Back to Dashboard
-        </button>
-
-        {/* Header */}
-        <div className="flex flex-col md:flex-row md:items-start justify-between gap-4 mb-6">
-          <div className="flex-1">
-            <div className="flex items-center gap-3 mb-2">
-              <h1 className="text-2xl font-display font-bold text-foreground">{job.customer_name}</h1>
-              <span className={`px-3 py-1 rounded-full text-xs font-medium ${statusClass[job.status]}`}>
-                {statusLabel[job.status]}
-              </span>
-            </div>
-            <div className="flex items-center gap-4 text-sm text-muted-foreground">
-              <span className="flex items-center gap-1.5">
-                <Car className="w-4 h-4" />
-                {job.license_plate}
-              </span>
-              <span className="font-mono text-xs bg-muted px-2 py-0.5 rounded">{job.id}</span>
-            </div>
-          </div>
+      <div className="p-4 sm:p-6 max-w-6xl mx-auto space-y-5">
+        {/* Back + Export row */}
+        <div className="flex items-center justify-between">
+          <button
+            onClick={() => navigate('/admin')}
+            className="flex items-center gap-1 text-sm text-muted-foreground hover:text-foreground transition-colors"
+          >
+            <ChevronLeft className="w-4 h-4" />
+            Back to Dashboard
+          </button>
           <button
             onClick={() => {
               toast.info('PDF export coming soon');
@@ -196,10 +179,7 @@ const InspectionDetail = () => {
           </button>
         </div>
 
-        <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-          {/* Left Column - Job & Vehicle Info */}
-          <div className="space-y-6">
-            {/* Vehicle Information */}
+        {/* Vehicle Information */}
             <motion.div
               initial={{ opacity: 0, y: 12 }}
               animate={{ opacity: 1, y: 0 }}
@@ -340,26 +320,21 @@ const InspectionDetail = () => {
                 <p className="text-sm text-muted-foreground">No mechanic assigned</p>
               )}
             </motion.div>
-          </div>
 
-          {/* Right Column - Inspection Reports */}
-          <div className="lg:col-span-2 space-y-6">
-            {!preServiceReport ? (
-              <div className="card-elevated p-8 text-center">
-                <FileText className="w-12 h-12 text-muted-foreground/30 mx-auto mb-3" />
-                <p className="text-muted-foreground">No inspection report yet</p>
-                <p className="text-xs text-muted-foreground mt-1">Report will appear here once the inspection is submitted</p>
-              </div>
-            ) : (
-              <ReportCard
-                report={preServiceReport}
-                type="Pre-Service"
-                photos={photos as Record<string, string>}
-                vehicleType={job.vehicle_type ?? 'sedan'}
-              />
-            )}
+        {!preServiceReport ? (
+          <div className="card-elevated p-8 text-center">
+            <FileText className="w-12 h-12 text-muted-foreground/30 mx-auto mb-3" />
+            <p className="text-muted-foreground">No inspection report yet</p>
+            <p className="text-xs text-muted-foreground mt-1">Report will appear here once the inspection is submitted</p>
           </div>
-        </div>
+        ) : (
+          <ReportCard
+            report={preServiceReport}
+            type="Pre-Service"
+            photos={photos as Record<string, string>}
+            vehicleType={job.vehicle_type ?? 'sedan'}
+          />
+        )}
       </div>
     </div>
   );
