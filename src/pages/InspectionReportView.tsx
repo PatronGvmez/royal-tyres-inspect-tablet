@@ -143,11 +143,42 @@ const InspectionReportView: React.FC = () => {
           <div className="px-5 py-3 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-1.5 border-t border-border bg-card/60">
             <div>
               <p className="font-display font-bold text-foreground">{job.customer_name}</p>
-              <p className="text-xs text-muted-foreground">{job.service_details}</p>
+              {job.service_details && (
+                <span className="inline-block mt-1 text-[11px] font-semibold px-2 py-0.5 rounded-full bg-primary/10 text-primary border border-primary/20">
+                  {job.service_details}
+                </span>
+              )}
+              {job.odometer != null && (
+                <span className="flex items-center gap-1 mt-1.5 text-[11px] text-muted-foreground">
+                  <Gauge className="w-3 h-3" />
+                  {job.odometer.toLocaleString()} km at intake
+                </span>
+              )}
             </div>
             <span className="self-start sm:self-auto text-[10px] font-mono bg-muted text-muted-foreground px-2.5 py-1 rounded-full border border-border">{job.id}</span>
           </div>
         </div>
+
+        {/* ── Intake Photos ── */}
+        {(job.license_plate_photo || job.disk_photo) && (
+          <div className={sectionCls}>
+            <p className={headingCls}>Intake Photos</p>
+            <div className="grid grid-cols-2 gap-3">
+              {job.license_plate_photo && (
+                <a href={job.license_plate_photo} target="_blank" rel="noreferrer" className="block">
+                  <img src={job.license_plate_photo} alt="License plate" className="w-full h-24 object-cover rounded-xl border border-border" />
+                  <p className="text-[11px] text-muted-foreground mt-1 text-center font-medium">License Plate</p>
+                </a>
+              )}
+              {job.disk_photo && (
+                <a href={job.disk_photo} target="_blank" rel="noreferrer" className="block">
+                  <img src={job.disk_photo} alt="License disk" className="w-full h-24 object-cover rounded-xl border border-border" />
+                  <p className="text-[11px] text-muted-foreground mt-1 text-center font-medium">License Disk</p>
+                </a>
+              )}
+            </div>
+          </div>
+        )}
 
         {/* ── Assigned Mechanic ── */}
         <div className={sectionCls}>
@@ -196,19 +227,19 @@ const InspectionReportView: React.FC = () => {
         {report && (
           <>
             {/* ── Odometer & Fuel — only shown when data exists ── */}
-            {(report.odometer != null || report.fuel_level) && (
+            {((report.odometer ?? job.odometer) != null || report.fuel_level) && (
               <div className={sectionCls}>
                 <p className={headingCls}>Vehicle Status</p>
                 <div className="grid grid-cols-2 gap-4">
                   {/* Odometer */}
-                  {report.odometer != null && (
+                  {(report.odometer ?? job.odometer) != null && (
                     <div className="flex items-start gap-3 p-3 rounded-xl bg-muted/50 border border-border">
                       <div className="p-2 rounded-lg bg-primary/10">
                         <Gauge className="w-4 h-4 text-primary" />
                       </div>
                       <div>
                         <p className={labelCls}>Odometer</p>
-                        <p className={valueCls}>{report.odometer.toLocaleString()} km</p>
+                        <p className={valueCls}>{(report.odometer ?? job.odometer)!.toLocaleString()} km</p>
                       </div>
                     </div>
                   )}
@@ -300,13 +331,47 @@ const InspectionReportView: React.FC = () => {
               )}
             </div>
 
+            {/* ── Inspector Signature ── */}
+            <div className={sectionCls}>
+              <div className="flex items-center justify-between mb-3">
+                <p className={headingCls}>Inspector Signature</p>
+                {report.mechanic_name && (
+                  <span className="text-xs font-medium text-muted-foreground">{report.mechanic_name}</span>
+                )}
+              </div>
+              {report.mechanic_signed_at && (
+                <p className="text-[11px] text-muted-foreground mb-2">
+                  Signed {new Date(report.mechanic_signed_at).toLocaleString('en-ZA', { day: '2-digit', month: 'short', year: 'numeric', hour: '2-digit', minute: '2-digit' })}
+                </p>
+              )}
+              {report.mechanic_signature_url ? (
+                <div className="rounded-xl border border-border overflow-hidden bg-white p-2">
+                  <img src={report.mechanic_signature_url} alt="Inspector signature" className="w-full max-h-40 object-contain" />
+                </div>
+              ) : (
+                <div className="rounded-xl border border-dashed border-border bg-muted/40 flex items-center justify-center py-8">
+                  <p className="text-sm text-muted-foreground">No signature captured</p>
+                </div>
+              )}
+            </div>
+
             {/* ── Customer Signature ── */}
             <div className={sectionCls}>
-              <p className={headingCls}>Customer Signature</p>
-              {report.signature_url ? (
+              <div className="flex items-center justify-between mb-3">
+                <p className={headingCls}>Customer Signature</p>
+                {report.customer_name && (
+                  <span className="text-xs font-medium text-muted-foreground">{report.customer_name}</span>
+                )}
+              </div>
+              {report.customer_signed_at && (
+                <p className="text-[11px] text-muted-foreground mb-2">
+                  Signed {new Date(report.customer_signed_at).toLocaleString('en-ZA', { day: '2-digit', month: 'short', year: 'numeric', hour: '2-digit', minute: '2-digit' })}
+                </p>
+              )}
+              {(report.customer_signature_url ?? report.signature_url) ? (
                 <div className="rounded-xl border border-border overflow-hidden bg-white p-2">
                   <img
-                    src={report.signature_url}
+                    src={report.customer_signature_url ?? report.signature_url}
                     alt="Customer signature"
                     className="w-full max-h-40 object-contain"
                   />

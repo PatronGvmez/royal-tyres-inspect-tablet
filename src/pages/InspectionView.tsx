@@ -4,7 +4,7 @@ import { useQueryClient, useQuery } from '@tanstack/react-query';
 import SignatureCanvas from 'react-signature-canvas';
 import { mockJobCards } from '@/data/mock';
 import { VehicleDamage, InspectionReport } from '@/types';
-import { ArrowLeft, Check, Trash2, Box, Loader2, Sun, Moon, AlertCircle, Clock } from 'lucide-react';
+import { ArrowLeft, Check, Trash2, Box, Loader2, Sun, Moon, AlertCircle, Clock, Gauge } from 'lucide-react';
 import { useTheme } from '@/hooks/use-theme';
 import { useAuth } from '@/context/AuthContext';
 import CarDiagram, { TyreOverlay } from '@/components/inspection/CarDiagram';
@@ -373,9 +373,21 @@ const InspectionView = () => {
           </div>
           {/* Job meta */}
           <div className="px-4 py-3 flex items-start justify-between gap-3">
-            <div className="min-w-0">
+            <div className="min-w-0 flex-1">
               <p className="text-sm font-bold text-foreground truncate">{job.customer_name}</p>
-              <p className="text-xs text-muted-foreground mt-0.5 line-clamp-1 leading-relaxed">{job.service_details}</p>
+              {/* Service badge */}
+              {job.service_details && (
+                <span className="inline-block mt-1 text-[11px] font-semibold px-2 py-0.5 rounded-full bg-primary/10 text-primary border border-primary/20 line-clamp-1">
+                  {job.service_details}
+                </span>
+              )}
+              {/* Odometer at intake */}
+              {job.odometer != null && (
+                <span className="inline-flex items-center gap-1 mt-1.5 text-[11px] text-muted-foreground">
+                  <Gauge className="w-3 h-3" />
+                  {job.odometer.toLocaleString()} km at intake
+                </span>
+              )}
             </div>
             {/* 3D toggle */}
             <button
@@ -390,6 +402,23 @@ const InspectionView = () => {
               3D
             </button>
           </div>
+          {/* Intake photos strip */}
+          {(job.license_plate_photo || job.disk_photo) && (
+            <div className="px-4 pb-3 flex gap-2">
+              {job.license_plate_photo && (
+                <a href={job.license_plate_photo} target="_blank" rel="noreferrer" className="flex-shrink-0">
+                  <img src={job.license_plate_photo} alt="License plate" className="h-14 w-20 object-cover rounded-lg border border-border" />
+                  <p className="text-[10px] text-muted-foreground mt-0.5 text-center">Plate</p>
+                </a>
+              )}
+              {job.disk_photo && (
+                <a href={job.disk_photo} target="_blank" rel="noreferrer" className="flex-shrink-0">
+                  <img src={job.disk_photo} alt="License disk" className="h-14 w-20 object-cover rounded-lg border border-border" />
+                  <p className="text-[10px] text-muted-foreground mt-0.5 text-center">License Disk</p>
+                </a>
+              )}
+            </div>
+          )}
           {/* Coloured accent border */}
           <div className="h-0.5 w-full bg-primary" />
         </div>

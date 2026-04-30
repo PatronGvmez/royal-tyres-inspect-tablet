@@ -239,6 +239,12 @@ const InspectionDetail = () => {
                     <span className="text-xs font-semibold px-2 py-0.5 rounded bg-primary/10 text-primary capitalize">{job.vehicle_type}</span>
                   </div>
                 )}
+                {job.odometer != null && (
+                  <div className="flex justify-between">
+                    <span className="text-xs text-muted-foreground flex items-center gap-1"><Gauge className="w-3 h-3" /> Odometer</span>
+                    <span className="text-sm font-mono font-medium text-foreground">{job.odometer.toLocaleString()} km</span>
+                  </div>
+                )}
                 {(job.vehicle_info?.vin) && (
                   <div className="flex justify-between">
                     <span className="text-xs text-muted-foreground">VIN</span>
@@ -246,6 +252,26 @@ const InspectionDetail = () => {
                   </div>
                 )}
               </div>
+              {/* Intake photos */}
+              {(job.license_plate_photo || job.disk_photo) && (
+                <div className="mt-3 pt-3 border-t border-border">
+                  <p className="text-[10px] font-semibold uppercase tracking-widest text-muted-foreground mb-2">Intake Photos</p>
+                  <div className="grid grid-cols-2 gap-2">
+                    {job.license_plate_photo && (
+                      <a href={job.license_plate_photo} target="_blank" rel="noreferrer" className="block">
+                        <img src={job.license_plate_photo} alt="License plate" className="w-full h-16 object-cover rounded-lg border border-border" />
+                        <p className="text-[10px] text-muted-foreground mt-0.5 text-center">Plate</p>
+                      </a>
+                    )}
+                    {job.disk_photo && (
+                      <a href={job.disk_photo} target="_blank" rel="noreferrer" className="block">
+                        <img src={job.disk_photo} alt="License disk" className="w-full h-16 object-cover rounded-lg border border-border" />
+                        <p className="text-[10px] text-muted-foreground mt-0.5 text-center">License Disk</p>
+                      </a>
+                    )}
+                  </div>
+                </div>
+              )}
             </motion.div>
 
             {/* Service Details */}
@@ -341,7 +367,6 @@ const InspectionDetail = () => {
 
 const ReportCard = ({ report, type, photos, vehicleType = 'sedan' }: { report: InspectionReport; type: string; photos?: Record<string, string>; vehicleType?: string }) => {
   const [showDamageMap, setShowDamageMap] = useState(true);
-  const [showSignature, setShowSignature] = useState(false);
 
   const tyreOverlays = (() => {
     const base = buildTyreOverlays(report.tire_conditions, vehicleType);
@@ -538,32 +563,53 @@ const ReportCard = ({ report, type, photos, vehicleType = 'sedan' }: { report: I
           </div>
         )}
 
+        {/* Inspector Signature */}
+        {(report.mechanic_signature_url || report.mechanic_name) && (
+          <div className="border-t border-border pt-4">
+            <div className="flex items-center justify-between mb-2">
+              <h3 className="text-xs font-semibold uppercase tracking-widest text-muted-foreground">Inspector Signature</h3>
+              {report.mechanic_name && (
+                <span className="text-xs text-muted-foreground font-medium">{report.mechanic_name}</span>
+              )}
+            </div>
+            {report.mechanic_signed_at && (
+              <p className="text-[11px] text-muted-foreground mb-2">
+                Signed {new Date(report.mechanic_signed_at).toLocaleString('en-ZA', { day: '2-digit', month: 'short', year: 'numeric', hour: '2-digit', minute: '2-digit' })}
+              </p>
+            )}
+            {report.mechanic_signature_url ? (
+              <div className="border border-border rounded-xl overflow-hidden bg-white">
+                <img src={report.mechanic_signature_url} alt="Inspector signature" className="w-full h-auto max-h-40 object-contain p-2" />
+              </div>
+            ) : (
+              <div className="flex items-center gap-2 px-3 py-2.5 rounded-lg bg-muted/40 border border-border">
+                <span className="text-sm text-muted-foreground">No signature captured</span>
+              </div>
+            )}
+          </div>
+        )}
+
         {/* Customer Signature */}
-        {report.signature_url && (
+        {(report.customer_signature_url || report.signature_url) && (
           <div className="border-t border-border pt-4">
             <div className="flex items-center justify-between mb-2">
               <h3 className="text-xs font-semibold uppercase tracking-widest text-muted-foreground">Customer Signature</h3>
-              <button
-                onClick={() => setShowSignature(v => !v)}
-                className="text-xs font-medium text-primary hover:underline"
-              >
-                {showSignature ? 'Hide' : 'View Signature'}
-              </button>
+              {(report.customer_name) && (
+                <span className="text-xs text-muted-foreground font-medium">{report.customer_name}</span>
+              )}
             </div>
-            {showSignature ? (
-              <div className="border border-border rounded-xl overflow-hidden bg-white">
-                <img
-                  src={report.signature_url}
-                  alt="Customer signature"
-                  className="w-full h-auto max-h-40 object-contain p-2"
-                />
-              </div>
-            ) : (
-              <div className="flex items-center gap-2 px-3 py-2.5 rounded-lg bg-success/10 border border-success/20">
-                <CheckCircle className="w-4 h-4 text-success" />
-                <span className="text-sm text-success font-medium">Signature captured</span>
-              </div>
+            {report.customer_signed_at && (
+              <p className="text-[11px] text-muted-foreground mb-2">
+                Signed {new Date(report.customer_signed_at).toLocaleString('en-ZA', { day: '2-digit', month: 'short', year: 'numeric', hour: '2-digit', minute: '2-digit' })}
+              </p>
             )}
+            <div className="border border-border rounded-xl overflow-hidden bg-white">
+              <img
+                src={report.customer_signature_url ?? report.signature_url}
+                alt="Customer signature"
+                className="w-full h-auto max-h-40 object-contain p-2"
+              />
+            </div>
           </div>
         )}
       </div>
