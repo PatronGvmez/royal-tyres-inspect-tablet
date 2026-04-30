@@ -12,25 +12,38 @@ import { UserModel } from '@/lib/firestoreModels';
 import { User } from '@/types';
 
 /**
- * Resolves a user profile by UID first, then falls back to email lookup.
- * Users created via the admin dashboard have Firestore docs keyed by an
- * email-derived ID rather than the Firebase Auth UID. When found by email
- * we migrate the doc to use the UID so future lookups are fast.
+ * Resolves a user profile, always treating the admin-panel (email-keyed) doc
+ * as the authoritative source of truth for the `role` field.
+ *
+ * Why: users added via the admin dashboard have Firestore docs keyed by an
+ * email-derived ID (e.g. "admin_royaltyres_co_za"). A past bug could also write
+ * a UID-keyed doc with role:"mechanic", overriding the correct admin role.
+ *
+ * Strategy:
+ *  1. Fetch both docs in parallel.
+ *  2. If an email-keyed doc exists, it wins on role (admin panel is source of truth).
+ *     Patch the UID-keyed doc if the role is stale or the doc is missing.
+ *  3. If only the UID-keyed doc exists (self sign-up path), use it as-is.
  */
 async function resolveProfile(uid: string, email: string | null): Promise<User | null> {
-  // Primary: UID-keyed lookup (fast path for all sign-up created accounts)
-  const byUid = await getUserProfile(uid);
-  if (byUid) return byUid;
+  const [byUid, byEmail] = await Promise.all([
+    getUserProfile(uid),
+    email ? UserModel.getByEmail(email) : Promise.resolve(null),
+  ]);
 
-  // Fallback: email lookup (catches admin-pre-seeded accounts)
-  if (!email) return null;
-  const byEmail = await UserModel.getByEmail(email);
-  if (!byEmail) return null;
+  if (byEmail) {
+    // Admin-panel doc is authoritative — build the canonical profile
+    const canonical: User = { ...byEmail, id: uid };
+    // Patch UID-keyed doc if it's missing or has a stale role
+    if (!byUid) {
+      try { await createUserProfile(uid, canonical); } catch { /* ignore */ }
+    } else if (byUid.role !== byEmail.role) {
+      try { await UserModel.updateRole(uid, byEmail.role); } catch { /* ignore */ }
+    }
+    return canonical;
+  }
 
-  // Migrate: write a UID-keyed doc so this fallback only runs once
-  const migrated: User = { ...byEmail, id: uid };
-  try { await createUserProfile(uid, migrated); } catch { /* ignore write errors, still let user in */ }
-  return migrated;
+  return byUid ?? null;
 }
 
 interface AuthContextType {
