@@ -294,6 +294,21 @@ const MechanicDashboard = () => {
     onError: () => toast.error('Failed to claim job — please try again.'),
   });
 
+  const takeoverJobMutation = useMutation({
+    mutationFn: ({ jobId }: { jobId: string; job: JobCard }) => acknowledgeJob(jobId, user!.id),
+    onSuccess: (_, { job }) => {
+      queryClient.invalidateQueries({ queryKey: ['jobs'] });
+      toast.success('Job taken over — you are now the assigned mechanic.');
+      const hasPhotos = !!frontPhotos[job.id];
+      if (job.status === 'in_progress' || hasPhotos) {
+        navigate(`/mechanic/inspect/${job.id}`);
+      } else {
+        navigate(`/mechanic/photo-upload/${job.id}`);
+      }
+    },
+    onError: () => toast.error('Failed to take over — please try again.'),
+  });
+
   const reInspectMutation = useMutation({
     mutationFn: (job: JobCard) =>
       createJobCard({
@@ -355,7 +370,20 @@ const MechanicDashboard = () => {
   );
   const inProgressCount = myJobs.filter(j => j.status === 'in_progress').length;
   const bookedCount = myJobs.filter(j => j.status === 'booked').length;
-  const hasNoResults = searchQuery.trim() !== '' && unclaimedJobs.length === 0 && activeJobs.length === 0 && completedJobs.length === 0;
+
+  // Jobs owned by OTHER mechanics that still need work — any mechanic can cover
+  const handoverJobs = allJobs.filter(j =>
+    j.mechanic_id &&
+    j.mechanic_id !== user?.id &&
+    j.status !== 'completed' &&
+    matchesSearch(j) &&
+    (statusFilter === 'all' || j.status === statusFilter)
+  );
+  const showHandoverSection =
+    handoverJobs.length > 0 &&
+    (statusFilter === 'all' || statusFilter === 'in_progress' || statusFilter === 'booked');
+
+  const hasNoResults = searchQuery.trim() !== '' && unclaimedJobs.length === 0 && activeJobs.length === 0 && completedJobs.length === 0 && handoverJobs.length === 0;
 
   // Tab definitions for the filter bar
   const filterTabs = [
@@ -665,6 +693,98 @@ const MechanicDashboard = () => {
                         <div className="h-0.5 w-full bg-success/70" />
                       </motion.div>
                     ))}
+                  </motion.div>
+
+                  {/* Divider before my jobs */}
+                  {(activeJobs.length > 0 || completedJobs.length > 0) && (
+                    <div className="flex items-center gap-3 mt-6 mb-2">
+                      <div className="flex-1 h-px bg-border" />
+                      <span className="text-[10px] font-semibold uppercase tracking-widest text-muted-foreground">My Jobs</span>
+                      <div className="flex-1 h-px bg-border" />
+                    </div>
+                  )}
+                </section>
+              )}
+
+              {/* ── Needs Cover — jobs from other mechanics that need a handover ── */}
+              {showHandoverSection && (
+                <section>
+                  <div className="flex items-center justify-between mb-2">
+                    <h2 className="text-xs font-semibold uppercase tracking-widest text-muted-foreground">Needs Cover</h2>
+                    <span className="px-2.5 py-1 rounded-full bg-warning/10 text-warning text-[10px] font-bold border border-warning/20">
+                      {handoverJobs.length} job{handoverJobs.length !== 1 ? 's' : ''}
+                    </span>
+                  </div>
+                  <p className="text-xs text-muted-foreground mb-4">
+                    These jobs were started by another mechanic who can't continue. Take one over to keep work moving.
+                  </p>
+
+                  <motion.div
+                    className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-2 gap-4 items-start"
+                    initial="hidden"
+                    animate="visible"
+                    variants={{ hidden: {}, visible: { transition: { staggerChildren: 0.07 } } }}
+                  >
+                    {handoverJobs.map(job => {
+                      const hasPhotos = !!frontPhotos[job.id];
+                      const isPending = takeoverJobMutation.isPending && takeoverJobMutation.variables?.jobId === job.id;
+                      return (
+                        <motion.div
+                          key={job.id}
+                          variants={{ hidden: { opacity: 0, y: 20 }, visible: { opacity: 1, y: 0 } }}
+                          transition={{ duration: 0.3 }}
+                          className="card-elevated overflow-hidden group hover:shadow-lg transition-all"
+                        >
+                          {/* Image area */}
+                          <div className="relative h-32 overflow-hidden" style={{ background: 'var(--vehicle-card-bg)' }}>
+                            <div className="absolute inset-0 pointer-events-none" style={{ background: 'var(--vehicle-card-glow)' }} />
+                            <VehicleCardCarousel
+                              vehicleType={job.vehicle_type}
+                              photos={allPhotos[job.id]}
+                              licensePlate={job.license_plate}
+                            />
+                            <div className="absolute top-2 left-2">
+                              <span className="flex items-center gap-1 bg-warning text-white text-[9px] font-bold px-1.5 py-0.5 rounded-full">
+                                <AlertCircle className="w-2.5 h-2.5" /> Needs Cover
+                              </span>
+                            </div>
+                            <div className="absolute top-2 right-2 flex items-center gap-1">
+                              <span className={`status-badge ${statusClass[job.status]}`}>{statusLabel[job.status]}</span>
+                              <span className="text-[9px] font-mono bg-black/40 text-white px-1.5 py-0.5 rounded-full backdrop-blur-sm">{job.id}</span>
+                            </div>
+                          </div>
+
+                          {/* Info */}
+                          <div className="p-4">
+                            <div className="flex items-center justify-between gap-2 min-w-0">
+                              <p className="text-sm font-bold text-foreground truncate">{job.customer_name}</p>
+                              <span className="shrink-0 text-[10px] font-mono font-bold text-foreground bg-muted px-2 py-0.5 rounded tracking-widest border border-border">{job.license_plate}</span>
+                            </div>
+                            {(job.make || job.model || job.year) && (
+                              <div className="flex items-center gap-1.5 mt-1 flex-wrap">
+                                {job.make && <span className="text-[10px] font-semibold px-1.5 py-0.5 rounded bg-primary/10 text-primary">{job.make}</span>}
+                                {job.model && <span className="text-[10px] font-semibold px-1.5 py-0.5 rounded bg-secondary text-foreground">{job.model}</span>}
+                                {job.year && <span className="text-[10px] font-mono text-muted-foreground">{job.year}</span>}
+                              </div>
+                            )}
+                            <p className="text-xs text-muted-foreground mt-1.5 line-clamp-2 leading-relaxed">{job.service_details}</p>
+
+                            {/* Take Over CTA */}
+                            <button
+                              onClick={() => { if (!isPending) takeoverJobMutation.mutate({ jobId: job.id, job }); }}
+                              disabled={isPending || takeoverJobMutation.isPending}
+                              className="mt-3 w-full flex items-center justify-center gap-2 px-3 py-2 rounded-lg text-xs font-bold hover:opacity-90 active:scale-[.98] transition-all disabled:opacity-50"
+                              style={{ background: 'hsl(var(--warning))', color: 'white' }}
+                            >
+                              {isPending ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <UserCheck className="w-3.5 h-3.5" />}
+                              {job.status === 'in_progress' ? 'Take Over & Continue' : (hasPhotos ? 'Take Over & Inspect' : 'Take Over & Start')}
+                            </button>
+                          </div>
+                          {/* Amber bottom border */}
+                          <div className="h-0.5 w-full" style={{ background: 'hsl(var(--warning)/0.7)' }} />
+                        </motion.div>
+                      );
+                    })}
                   </motion.div>
 
                   {/* Divider before my jobs */}
