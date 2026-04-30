@@ -25,25 +25,33 @@ import { User } from '@/types';
  *     Patch the UID-keyed doc if the role is stale or the doc is missing.
  *  3. If only the UID-keyed doc exists (self sign-up path), use it as-is.
  */
+/** Normalize role to lowercase so Firestore values like "Admin" work correctly. */
+function normalizeRole(role: string | undefined): 'admin' | 'mechanic' {
+  return (role ?? '').toLowerCase() === 'admin' ? 'admin' : 'mechanic';
+}
+
 async function resolveProfile(uid: string, email: string | null): Promise<User | null> {
+  // getByEmail does a collection query that Firestore rules may block for
+  // regular (non-admin) reads — always catch and treat as null.
   const [byUid, byEmail] = await Promise.all([
-    getUserProfile(uid),
-    email ? UserModel.getByEmail(email) : Promise.resolve(null),
+    getUserProfile(uid).catch(() => null),
+    email ? UserModel.getByEmail(email).catch(() => null) : Promise.resolve(null),
   ]);
 
   if (byEmail) {
     // Admin-panel doc is authoritative — build the canonical profile
-    const canonical: User = { ...byEmail, id: uid };
-    // Patch UID-keyed doc if it's missing or has a stale role
+    const canonical: User = { ...byEmail, id: uid, role: normalizeRole(byEmail.role) };
+    // Patch UID-keyed doc if it's missing or has a stale/wrong-case role
     if (!byUid) {
       try { await createUserProfile(uid, canonical); } catch { /* ignore */ }
-    } else if (byUid.role !== byEmail.role) {
-      try { await UserModel.updateRole(uid, byEmail.role); } catch { /* ignore */ }
+    } else if (normalizeRole(byUid.role) !== canonical.role) {
+      try { await UserModel.updateRole(uid, canonical.role); } catch { /* ignore */ }
     }
     return canonical;
   }
 
-  return byUid ?? null;
+  if (byUid) return { ...byUid, role: normalizeRole(byUid.role) };
+  return null;
 }
 
 interface AuthContextType {

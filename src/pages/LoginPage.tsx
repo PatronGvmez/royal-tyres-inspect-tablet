@@ -23,6 +23,7 @@ function getFirebaseErrorMessage(code: string, message?: string): string {
     case 'auth/too-many-requests':     return 'Too many failed attempts — try again later';
     case 'auth/network-request-failed': return 'Network error — check your connection';
     case 'auth/no-profile':            return 'Account not set up yet. Contact your administrator.';
+    case 'permission-denied':          return 'Access denied — contact your administrator.';
     default:                           return message || 'Something went wrong — please try again';
   }
 }
