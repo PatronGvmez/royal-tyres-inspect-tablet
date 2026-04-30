@@ -730,6 +730,7 @@ const InspectionView = () => {
             part: damages[editingDamageIdx].part,
             damage_type: damages[editingDamageIdx].damage_type,
             severity: damages[editingDamageIdx].severity,
+            photo_url: damages[editingDamageIdx].photo_url,
           } : undefined}
         />
       )}

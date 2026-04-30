@@ -1046,88 +1046,136 @@ const MechanicDashboard = () => {
       </div>
 
       {/* ── Vehicle History / Re-Inspect Modal ── */}
-      {selectedCompleted && (
-        <div
-          className="fixed inset-0 z-50 flex items-end sm:items-center justify-center bg-black/50 backdrop-blur-sm p-4"
-          onClick={() => setSelectedCompleted(null)}
-        >
+      {selectedCompleted && (() => {
+        const type = (vehicleViewSVGs[selectedCompleted.vehicle_type as VehicleType] ? selectedCompleted.vehicle_type : 'sedan') as VehicleType;
+        const SVGComp = vehicleViewSVGs[type].front;
+        const jobPhotos = allPhotos[selectedCompleted.id];
+        const frontPhoto = jobPhotos?.front;
+        const photoCount = jobPhotos ? Object.values(jobPhotos).filter(Boolean).length : 0;
+        const dateLabel = getJobDateLabel(selectedCompleted);
+        const vehicleLabel = VEHICLE_TYPE_TO_BODY[selectedCompleted.vehicle_type ?? ''] ?? selectedCompleted.vehicle_type ?? 'Vehicle';
+        return (
           <div
-            className="w-full max-w-lg bg-card rounded-2xl border border-border overflow-hidden"
-            style={{ boxShadow: 'var(--shadow-modal)' }}
-            onClick={e => e.stopPropagation()}
+            className="fixed inset-0 z-50 flex items-end sm:items-center justify-center bg-black/60 backdrop-blur-sm p-4"
+            onClick={() => { setSelectedCompleted(null); setReInspectService(''); }}
           >
-            {/* Header */}
-            <div className="relative h-36 overflow-hidden" style={{ background: 'var(--vehicle-card-bg)' }}>
-              {/* Bottom glow */}
-              <div className="absolute inset-0 pointer-events-none" style={{ background: 'var(--vehicle-card-glow)' }} />
-              {(() => {
-                const type = (vehicleViewSVGs[selectedCompleted.vehicle_type as VehicleType] ? selectedCompleted.vehicle_type : 'sedan') as VehicleType;
-                const SVGComp = vehicleViewSVGs[type].front;
-                return <SVGComp className="relative w-full h-full p-5" style={{ color: 'hsl(var(--primary))' }} />;
-              })()}
-              <div className="absolute inset-0 bg-gradient-to-t from-foreground/50 via-foreground/10 to-transparent" />
-              {/* License */}
-              <div className="absolute bottom-3 left-4">
-                <span className="text-sm font-mono font-black text-background tracking-widest bg-foreground/50 backdrop-blur-sm px-3 py-1 rounded-lg">
-                  {selectedCompleted.license_plate}
-                </span>
-              </div>
-              {/* Close */}
-              <button
-                onClick={() => setSelectedCompleted(null)}
-                className="absolute top-3 right-3 p-1.5 rounded-full bg-foreground/40 text-background hover:bg-foreground/60 transition-colors"
-              >
-                <X className="w-4 h-4" />
-              </button>
-              {/* ID */}
-              <div className="absolute top-3 left-3">
-                <span className="text-[10px] font-mono bg-foreground/50 text-background px-2 py-0.5 rounded-full">{selectedCompleted.id}</span>
-              </div>
-            </div>
+            <motion.div
+              className="w-full max-w-md bg-card rounded-2xl border border-border overflow-hidden"
+              style={{ boxShadow: 'var(--shadow-modal)' }}
+              onClick={e => e.stopPropagation()}
+              initial={{ opacity: 0, y: 24, scale: 0.97 }}
+              animate={{ opacity: 1, y: 0, scale: 1 }}
+              transition={{ duration: 0.22, ease: 'easeOut' }}
+            >
+              {/* ── Header banner ── */}
+              <div className="relative h-40 overflow-hidden" style={{ background: 'var(--vehicle-card-bg)' }}>
+                <div className="absolute inset-0 pointer-events-none" style={{ background: 'var(--vehicle-card-glow)' }} />
+                {frontPhoto
+                  ? <img src={frontPhoto} alt={selectedCompleted.license_plate} className="w-full h-full object-cover" />
+                  : <SVGComp className="relative w-full h-full p-6" style={{ color: 'hsl(var(--primary))' }} />
+                }
+                {/* Gradient overlay */}
+                <div className="absolute inset-0 bg-gradient-to-t from-black/70 via-black/20 to-transparent" />
 
-            <div className="p-5">
-              {/* Vehicle summary */}
-              <div className="flex items-start gap-3 mb-4">
-                <div className="w-10 h-10 rounded-xl bg-green-50 flex items-center justify-center flex-shrink-0">
-                  <CheckCircle2 className="w-5 h-5 text-green-600" />
+                {/* Top row: job ID + close */}
+                <div className="absolute top-3 left-3 right-3 flex items-center justify-between">
+                  <span className="text-[10px] font-mono bg-black/50 backdrop-blur-sm text-white/80 px-2 py-0.5 rounded-full border border-white/10">
+                    {selectedCompleted.id}
+                  </span>
+                  <button
+                    onClick={() => { setSelectedCompleted(null); setReInspectService(''); }}
+                    className="p-1.5 rounded-full bg-black/40 backdrop-blur-sm text-white hover:bg-black/60 transition-colors"
+                  >
+                    <X className="w-3.5 h-3.5" />
+                  </button>
                 </div>
-                <div className="flex-1 min-w-0">
-                  <h3 className="text-base font-display font-bold text-foreground">{selectedCompleted.customer_name}</h3>
-                  <p className="text-xs text-muted-foreground mt-0.5 line-clamp-2">{selectedCompleted.service_details}</p>
-                </div>
-              </div>
 
-              {/* History timeline stub */}
-              <div className="mb-4 rounded-xl border border-border bg-muted/50 p-3">
-                <div className="flex items-center gap-2 mb-2">
-                  <History className="w-3.5 h-3.5 text-muted-foreground" />
-                  <span className="text-xs font-semibold text-foreground">Service History</span>
-                </div>
-                <div className="flex items-start gap-2.5">
-                  <div className="flex flex-col items-center">
-                    <div className="w-2 h-2 rounded-full bg-green-500 mt-1 flex-shrink-0" />
-                    <div className="w-px flex-1 bg-border mt-1" />
-                  </div>
-                  <div className="pb-2 flex-1 min-w-0">
-                    <p className="text-xs font-medium text-foreground">Completed — {selectedCompleted.service_details}</p>
-                    <p className="text-[10px] text-muted-foreground mt-0.5">{new Date().toLocaleDateString('en-ZA', { day: 'numeric', month: 'long', year: 'numeric' })}</p>
+                {/* Bottom row: plate + badges */}
+                <div className="absolute bottom-3 left-4 right-4 flex items-end justify-between gap-2">
+                  <span className="text-sm font-mono font-black text-white tracking-widest bg-black/50 backdrop-blur-sm px-3 py-1 rounded-lg border border-white/10">
+                    {selectedCompleted.license_plate}
+                  </span>
+                  <div className="flex items-center gap-1.5 flex-shrink-0">
+                    <span className="text-[10px] font-semibold bg-green-500/80 text-white px-2 py-0.5 rounded-full backdrop-blur-sm">
+                      Completed
+                    </span>
+                    {photoCount > 0 && (
+                      <span className="flex items-center gap-1 text-[10px] font-semibold bg-black/40 text-white/80 px-2 py-0.5 rounded-full backdrop-blur-sm border border-white/10">
+                        <Camera className="w-2.5 h-2.5" />{photoCount}
+                      </span>
+                    )}
                   </div>
                 </div>
-                <div className="flex items-start gap-2.5">
-                  <div className="flex flex-col items-center">
-                    <div className="w-2 h-2 rounded-full border border-dashed border-muted-foreground mt-1 flex-shrink-0" />
+              </div>
+
+              <div className="p-5 space-y-4">
+                {/* ── Customer + service row ── */}
+                <div className="flex items-start gap-3">
+                  <div className="w-9 h-9 rounded-xl bg-success/10 border border-success/20 flex items-center justify-center flex-shrink-0">
+                    <CheckCircle2 className="w-4.5 h-4.5 text-success" style={{ width: 18, height: 18 }} />
                   </div>
                   <div className="flex-1 min-w-0">
-                    <p className="text-xs text-muted-foreground italic">Next service will appear here…</p>
+                    <h3 className="text-sm font-display font-bold text-foreground leading-tight">{selectedCompleted.customer_name}</h3>
+                    <p className="text-xs text-muted-foreground mt-0.5 line-clamp-2 leading-relaxed">{selectedCompleted.service_details}</p>
                   </div>
                 </div>
-              </div>
 
-              {/* Re-inspect section */}
-              <div className="space-y-3">
-                <div>
-                  <label className="flex items-center gap-1.5 text-xs font-semibold text-foreground mb-1.5">
-                    <FileText className="w-3 h-3 text-muted-foreground" />
+                {/* ── Vehicle details chips ── */}
+                <div className="flex flex-wrap items-center gap-1.5">
+                  <span className="flex items-center gap-1 text-[10px] font-semibold bg-muted text-muted-foreground px-2 py-0.5 rounded-full border border-border">
+                    <Car className="w-2.5 h-2.5" />{vehicleLabel}
+                  </span>
+                  {(selectedCompleted.make || selectedCompleted.model) && (
+                    <span className="text-[10px] font-semibold bg-muted text-muted-foreground px-2 py-0.5 rounded-full border border-border">
+                      {[selectedCompleted.make, selectedCompleted.model, selectedCompleted.year].filter(Boolean).join(' ')}
+                    </span>
+                  )}
+                  {selectedCompleted.odometer != null && (
+                    <span className="flex items-center gap-1 text-[10px] font-semibold bg-muted text-muted-foreground px-2 py-0.5 rounded-full border border-border">
+                      <Gauge className="w-2.5 h-2.5" />{selectedCompleted.odometer.toLocaleString()} km
+                    </span>
+                  )}
+                </div>
+
+                {/* ── Service history ── */}
+                <div className="rounded-xl border border-border bg-muted/40 p-3.5">
+                  <div className="flex items-center justify-between mb-3">
+                    <div className="flex items-center gap-2">
+                      <History className="w-3.5 h-3.5 text-muted-foreground" />
+                      <span className="text-xs font-semibold text-foreground">Service History</span>
+                    </div>
+                    <span className="text-[10px] text-muted-foreground">{dateLabel}</span>
+                  </div>
+                  {/* Completed entry */}
+                  <div className="flex items-start gap-2.5">
+                    <div className="flex flex-col items-center mt-0.5">
+                      <div className="w-2 h-2 rounded-full bg-success flex-shrink-0" />
+                      <div className="w-px flex-1 bg-border mt-1 min-h-[16px]" />
+                    </div>
+                    <div className="pb-3 flex-1 min-w-0">
+                      <p className="text-xs font-semibold text-foreground leading-snug">{selectedCompleted.service_details}</p>
+                      <div className="flex items-center gap-1.5 mt-1">
+                        <span className="text-[10px] text-success font-medium">Completed</span>
+                        <span className="text-[10px] text-muted-foreground">·</span>
+                        <span className="text-[10px] text-muted-foreground">{dateLabel}</span>
+                      </div>
+                    </div>
+                  </div>
+                  {/* Next service placeholder */}
+                  <div className="flex items-start gap-2.5">
+                    <div className="flex flex-col items-center mt-0.5">
+                      <div className="w-2 h-2 rounded-full border border-dashed border-muted-foreground/50 flex-shrink-0" />
+                    </div>
+                    <div className="flex-1 min-w-0">
+                      <p className="text-[11px] text-muted-foreground italic">Next service will appear here…</p>
+                    </div>
+                  </div>
+                </div>
+
+                {/* ── Re-inspect section ── */}
+                <div className="space-y-2">
+                  <label className="flex items-center gap-1.5 text-xs font-semibold text-foreground">
+                    <RotateCcw className="w-3 h-3 text-muted-foreground" />
                     New Service / Reason for Re-inspection
                   </label>
                   <textarea
@@ -1135,17 +1183,18 @@ const MechanicDashboard = () => {
                     onChange={e => setReInspectService(e.target.value)}
                     placeholder={`e.g. Follow-up on ${selectedCompleted.service_details}`}
                     rows={2}
-                    className={`${inputCls} resize-none`}
+                    className={`${inputCls} resize-none text-xs`}
                   />
-                  <p className="text-[10px] text-muted-foreground mt-1">Leave blank to reuse the previous service description.</p>
+                  <p className="text-[10px] text-muted-foreground">Leave blank to reuse the previous service description.</p>
                 </div>
 
-                <div className="grid grid-cols-2 gap-2">
+                {/* ── Action buttons ── */}
+                <div className="grid grid-cols-2 gap-2 pt-1">
                   <button
                     onClick={() => navigate(`/mechanic/report/${selectedCompleted.id}`)}
-                    className="flex items-center justify-center gap-2 px-4 py-2.5 rounded-xl border border-border bg-muted text-sm font-semibold text-foreground hover:bg-secondary transition-colors"
+                    className="flex items-center justify-center gap-2 px-4 py-2.5 rounded-xl border border-border bg-card text-sm font-semibold text-foreground hover:bg-muted active:scale-[.98] transition-all"
                   >
-                    <Eye className="w-4 h-4" />
+                    <Eye className="w-4 h-4 flex-shrink-0" />
                     View Report
                   </button>
                   <button
@@ -1159,19 +1208,18 @@ const MechanicDashboard = () => {
                     disabled={reInspectMutation.isPending}
                     className="flex items-center justify-center gap-2 px-4 py-2.5 rounded-xl bg-primary text-primary-foreground text-sm font-semibold hover:opacity-90 active:scale-[.98] transition-all disabled:opacity-50"
                   >
-                    {reInspectMutation.isPending ? (
-                      <Loader2 className="w-4 h-4 animate-spin" />
-                    ) : (
-                      <RotateCcw className="w-4 h-4" />
-                    )}
+                    {reInspectMutation.isPending
+                      ? <Loader2 className="w-4 h-4 animate-spin flex-shrink-0" />
+                      : <RotateCcw className="w-4 h-4 flex-shrink-0" />
+                    }
                     {reInspectMutation.isPending ? 'Creating…' : 'Re-Inspect'}
                   </button>
                 </div>
               </div>
-            </div>
+            </motion.div>
           </div>
-        </div>
-      )}
+        );
+      })()}
 
       {/* ── Add New Car Modal ── */}
       {showAddModal && (

@@ -1,6 +1,6 @@
-import React, { useState } from 'react';
+import React, { useRef, useState } from 'react';
 import { VehicleDamage } from '@/types';
-import { X } from 'lucide-react';
+import { Camera, X } from 'lucide-react';
 
 type ViewAngle = 'front' | 'rear' | 'left' | 'right' | 'top';
 
@@ -8,7 +8,7 @@ interface DamageModalProps {
   onSubmit: (damage: Omit<VehicleDamage, 'coordinates'>) => void;
   onClose: () => void;
   view?: string;
-  initialValues?: Pick<VehicleDamage, 'part' | 'damage_type' | 'severity'>;
+  initialValues?: Pick<VehicleDamage, 'part' | 'damage_type' | 'severity'> & { photo_url?: string };
 }
 
 const partsByView: Record<ViewAngle, string[]> = {
@@ -76,9 +76,21 @@ const DamageModal: React.FC<DamageModalProps> = ({ onSubmit, onClose, view, init
   const [part, setPart] = useState(initialValues?.part ?? activeParts[0]);
   const [damageType, setDamageType] = useState<VehicleDamage['damage_type']>(initialValues?.damage_type ?? 'scratch');
   const [severity, setSeverity] = useState<VehicleDamage['severity']>(initialValues?.severity ?? 'minor');
+  const [photoUrl, setPhotoUrl] = useState<string | undefined>(initialValues?.photo_url);
+  const fileInputRef = useRef<HTMLInputElement>(null);
+
+  const handlePhotoChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    const reader = new FileReader();
+    reader.onload = ev => setPhotoUrl(ev.target?.result as string);
+    reader.readAsDataURL(file);
+    // reset so same file can be re-selected
+    e.target.value = '';
+  };
 
   const handleSubmit = () => {
-    onSubmit({ part, damage_type: damageType, severity });
+    onSubmit({ part, damage_type: damageType, severity, photo_url: photoUrl });
   };
 
   return (
@@ -141,6 +153,42 @@ const DamageModal: React.FC<DamageModalProps> = ({ onSubmit, onClose, view, init
               </button>
             ))}
           </div>
+        </div>
+
+        {/* Close-up Photo */}
+        <div>
+          <label className="text-xs text-muted-foreground mb-1.5 block">Close-up Photo <span className="text-muted-foreground/50">(optional)</span></label>
+          <input
+            ref={fileInputRef}
+            type="file"
+            accept="image/*"
+            capture="environment"
+            className="hidden"
+            onChange={handlePhotoChange}
+          />
+          {photoUrl ? (
+            <div className="relative rounded-xl overflow-hidden border border-border" style={{ height: 120 }}>
+              <img src={photoUrl} alt="Damage close-up" className="w-full h-full object-cover" />
+              <button
+                onClick={() => setPhotoUrl(undefined)}
+                className="absolute top-2 right-2 p-1 rounded-full bg-background/80 text-foreground hover:bg-destructive hover:text-destructive-foreground transition-colors"
+                aria-label="Remove photo"
+              >
+                <X className="w-3.5 h-3.5" />
+              </button>
+              <div className="absolute bottom-0 inset-x-0 bg-gradient-to-t from-black/60 to-transparent px-2 py-1">
+                <span className="text-[10px] text-white/80">Tap × to retake</span>
+              </div>
+            </div>
+          ) : (
+            <button
+              onClick={() => fileInputRef.current?.click()}
+              className="w-full flex items-center justify-center gap-2 py-4 rounded-xl border border-dashed border-border text-muted-foreground hover:border-primary hover:text-primary transition-colors"
+            >
+              <Camera className="w-4 h-4" />
+              <span className="text-sm">Capture close-up photo</span>
+            </button>
+          )}
         </div>
 
         <button onClick={handleSubmit} className="w-full px-4 py-3 rounded-xl bg-primary text-primary-foreground font-semibold text-sm hover:opacity-90 transition-opacity">

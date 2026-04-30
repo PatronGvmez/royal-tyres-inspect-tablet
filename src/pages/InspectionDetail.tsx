@@ -4,10 +4,11 @@ import { useQuery } from '@tanstack/react-query';
 import { useAuth } from '@/context/AuthContext';
 import { fetchJobCardById, fetchInspectionReport, fetchJobPhotos, getUserProfile } from '@/lib/firestore';
 import { JobCard, InspectionReport, User } from '@/types';
+import { generateInspectionPDF } from '@/lib/pdfExport';
 import { 
   ChevronLeft, Car, Fuel, Gauge, Calendar, Clock, 
   User as UserIcon, FileText, AlertTriangle, CheckCircle, Loader2,
-  ClipboardList, Printer, Image, Circle, Wrench
+  ClipboardList, Printer, Circle, Wrench
 } from 'lucide-react';
 import Navbar from '@/components/layout/Navbar';
 import CarDiagram from '@/components/inspection/CarDiagram';
@@ -64,6 +65,27 @@ const InspectionDetail = () => {
 
   const isLoading = jobLoading || reportsLoading;
   const preServiceReport = report ?? null;
+
+  const [isGeneratingPdf, setIsGeneratingPdf] = useState(false);
+
+  const handleExportPdf = async () => {
+    if (!job) return;
+    setIsGeneratingPdf(true);
+    try {
+      await generateInspectionPDF({
+        job,
+        report: report ?? null,
+        photos,
+        mechanic: mechanic ?? null,
+      });
+      toast.success('PDF downloaded');
+    } catch (err) {
+      console.error('PDF generation failed:', err);
+      toast.error('Failed to generate PDF — please try again');
+    } finally {
+      setIsGeneratingPdf(false);
+    }
+  };
 
   /** Safely format various timestamp formats (Firestore Timestamp, epoch ms, ISO string) */
   const formatDate = (dateVal?: unknown) => {
@@ -169,13 +191,14 @@ const InspectionDetail = () => {
             Back to Dashboard
           </button>
           <button
-            onClick={() => {
-              toast.info('PDF export coming soon');
-            }}
-            className="flex items-center gap-2 px-4 py-2 rounded-lg bg-muted text-foreground text-sm font-medium hover:bg-muted/80 transition-colors"
+            onClick={handleExportPdf}
+            disabled={isGeneratingPdf}
+            className="flex items-center gap-2 px-4 py-2 rounded-lg bg-muted text-foreground text-sm font-medium hover:bg-muted/80 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
           >
-            <Printer className="w-4 h-4" />
-            Export PDF
+            {isGeneratingPdf
+              ? <Loader2 className="w-4 h-4 animate-spin" />
+              : <Printer className="w-4 h-4" />}
+            {isGeneratingPdf ? 'Generating…' : 'Export PDF'}
           </button>
         </div>
 
@@ -491,7 +514,12 @@ const ReportCard = ({ report, type, photos, vehicleType = 'sedan' }: { report: I
             </div>
             <div className="divide-y divide-border">
               {report.damages.map((d, i) => (
-                <div key={i} className="flex items-center justify-between px-3 py-2.5 bg-card gap-3">
+                <div key={i} className="flex items-center gap-3 px-3 py-2.5 bg-card">
+                  {d.photo_url && (
+                    <a href={d.photo_url} target="_blank" rel="noreferrer" className="shrink-0 rounded-lg overflow-hidden border border-border" style={{ width: 48, height: 40 }}>
+                      <img src={d.photo_url} alt={`${d.part} close-up`} className="w-full h-full object-cover" />
+                    </a>
+                  )}
                   <div className="flex items-center gap-2 min-w-0 flex-1">
                     <Car className="w-3.5 h-3.5 text-muted-foreground shrink-0" />
                     <span className="text-sm font-semibold text-foreground truncate">{d.part}</span>
@@ -509,27 +537,10 @@ const ReportCard = ({ report, type, photos, vehicleType = 'sedan' }: { report: I
                   >
                     {d.severity}
                   </span>
-                  {d.photo_url && (
-                    <span className="text-[10px] text-primary flex items-center gap-1 shrink-0">
-                      <Image className="w-3 h-3" /> Photo
-                    </span>
-                  )}
                 </div>
               ))}
             </div>
-            {/* Inline damage photos */}
-            {report.damages.some(d => d.photo_url) && (
-              <div className="border-t border-border divide-y divide-border">
-                {report.damages.filter(d => d.photo_url).map((d, i) => (
-                  <img
-                    key={i}
-                    src={d.photo_url}
-                    alt={`Damage to ${d.part}`}
-                    className="w-full h-32 object-cover"
-                  />
-                ))}
-              </div>
-            )}
+
           </div>
         ) : (
           <div className="flex items-center gap-2 px-3 py-2.5 rounded-lg bg-success/10 border border-success/20">

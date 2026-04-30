@@ -1,14 +1,16 @@
-import React from 'react';
+import React, { useState } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { useQuery } from '@tanstack/react-query';
 import { fetchInspectionReport, fetchJobCardById, fetchJobPhotos, getUserProfile } from '@/lib/firestore';
 import { mockJobCards } from '@/data/mock';
-import { ArrowLeft, Loader2, Gauge, Fuel, Car, AlertTriangle, CheckCircle2, Sun, Moon, Wrench, User as UserIcon } from 'lucide-react';
+import { ArrowLeft, Loader2, Gauge, Fuel, Car, AlertTriangle, CheckCircle2, Sun, Moon, Wrench, User as UserIcon, Printer } from 'lucide-react';
 import { User } from '@/types';
 import { buildTyreOverlays, TYRE_CONDITIONS } from '@/lib/tyreUtils';
 import { useTheme } from '@/hooks/use-theme';
 import CarDiagram from '@/components/inspection/CarDiagram';
 import { vehicleViewSVGs, VehicleType } from '@/components/inspection/VehicleSVGs';
+import { generateInspectionPDF } from '@/lib/pdfExport';
+import { toast } from 'sonner';
 
 const fuelLevelWidths: Record<string, string> = {
   Empty: 'w-0',
@@ -57,6 +59,27 @@ const InspectionReportView: React.FC = () => {
   });
 
   const isLoading = jobLoading || reportLoading;
+
+  const [isGeneratingPdf, setIsGeneratingPdf] = useState(false);
+
+  const handleExportPdf = async () => {
+    if (!job) return;
+    setIsGeneratingPdf(true);
+    try {
+      await generateInspectionPDF({
+        job,
+        report: report ?? null,
+        photos,
+        mechanic: mechanic ?? null,
+      });
+      toast.success('PDF downloaded');
+    } catch (err) {
+      console.error('PDF generation failed:', err);
+      toast.error('Failed to generate PDF — please try again');
+    } finally {
+      setIsGeneratingPdf(false);
+    }
+  };
 
   if (isLoading) {
     return (
@@ -122,6 +145,16 @@ const InspectionReportView: React.FC = () => {
             aria-label="Toggle theme"
           >
             {isDark ? <Sun className="w-4 h-4" /> : <Moon className="w-4 h-4" />}
+          </button>
+          <button
+            onClick={handleExportPdf}
+            disabled={isGeneratingPdf}
+            className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-primary text-primary-foreground text-xs font-semibold hover:bg-primary/90 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+          >
+            {isGeneratingPdf
+              ? <Loader2 className="w-3.5 h-3.5 animate-spin" />
+              : <Printer className="w-3.5 h-3.5" />}
+            {isGeneratingPdf ? 'Generating…' : 'Export PDF'}
           </button>
           <span className="hidden sm:flex items-center gap-1 text-[10px] font-mono bg-muted text-muted-foreground px-2.5 py-1 rounded-full border border-border">
             {id}
@@ -313,8 +346,13 @@ const InspectionReportView: React.FC = () => {
               {report.damages.length > 0 && (
                 <div className="space-y-2 mt-1">
                   {report.damages.map((d, i) => (
-                    <div key={i} className="flex items-center justify-between gap-3 px-3 py-2.5 rounded-xl bg-muted/50 border border-border">
-                      <div className="flex items-center gap-2 min-w-0">
+                    <div key={i} className="flex items-center gap-3 px-3 py-2.5 rounded-xl bg-muted/50 border border-border">
+                      {d.photo_url && (
+                        <a href={d.photo_url} target="_blank" rel="noreferrer" className="shrink-0 rounded-lg overflow-hidden border border-border" style={{ width: 48, height: 40 }}>
+                          <img src={d.photo_url} alt={`${d.part} close-up`} className="w-full h-full object-cover" />
+                        </a>
+                      )}
+                      <div className="flex items-center gap-2 min-w-0 flex-1">
                         <Car className="w-3.5 h-3.5 text-muted-foreground shrink-0" />
                         <span className="text-sm font-medium text-foreground truncate">{d.part}</span>
                         <span className="text-xs text-muted-foreground capitalize shrink-0">{d.damage_type}</span>
