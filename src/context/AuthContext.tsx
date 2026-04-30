@@ -30,18 +30,47 @@ function normalizeRole(role: string | undefined): 'admin' | 'mechanic' {
   return (role ?? '').toLowerCase() === 'admin' ? 'admin' : 'mechanic';
 }
 
+/**
+ * Convert an email address to the doc ID used by the admin dashboard's
+ * "Add User" flow: every non-alphanumeric character becomes an underscore.
+ * e.g. "admin@royaltyres.co.za" → "admin_royaltyres_co_za"
+ */
+function emailToDocId(email: string): string {
+  return email.replace(/[^a-zA-Z0-9]/g, '_');
+}
+
+/**
+ * Try every possible Firestore document key for this user:
+ *  1. users/{firebaseAuthUID}  — accounts created via sign-up flow
+ *  2. users/{emailDerivedId}   — accounts pre-seeded via admin dashboard
+ *  3. collection query by email — last resort (may be blocked by Firestore rules)
+ *
+ * If an email-keyed doc is found, its role is authoritative (admin panel is
+ * source of truth). A UID-keyed doc is patched/created so future lookups
+ * use the fast path.
+ */
 async function resolveProfile(uid: string, email: string | null): Promise<User | null> {
-  // getByEmail does a collection query that Firestore rules may block for
-  // regular (non-admin) reads — always catch and treat as null.
-  const [byUid, byEmail] = await Promise.all([
+  const emailDocId = email ? emailToDocId(email) : null;
+
+  // Fetch both direct-key lookups in parallel (these are never blocked by rules
+  // the same way collection queries are)
+  const [byUid, byEmailDocId] = await Promise.all([
     getUserProfile(uid).catch(() => null),
-    email ? UserModel.getByEmail(email).catch(() => null) : Promise.resolve(null),
+    emailDocId && emailDocId !== uid
+      ? getUserProfile(emailDocId).catch(() => null)
+      : Promise.resolve(null),
   ]);
 
-  if (byEmail) {
-    // Admin-panel doc is authoritative — build the canonical profile
-    const canonical: User = { ...byEmail, id: uid, role: normalizeRole(byEmail.role) };
-    // Patch UID-keyed doc if it's missing or has a stale/wrong-case role
+  // Fall back to email collection query only if direct reads found nothing
+  const emailDoc = byEmailDocId ||
+    (email && !byUid
+      ? await UserModel.getByEmail(email).catch(() => null)
+      : null);
+
+  if (emailDoc) {
+    // Email-keyed doc is authoritative for role
+    const canonical: User = { ...emailDoc, id: uid, role: normalizeRole(emailDoc.role) };
+    // Ensure a UID-keyed doc exists and has the correct role going forward
     if (!byUid) {
       try { await createUserProfile(uid, canonical); } catch { /* ignore */ }
     } else if (normalizeRole(byUid.role) !== canonical.role) {
@@ -51,6 +80,8 @@ async function resolveProfile(uid: string, email: string | null): Promise<User |
   }
 
   if (byUid) return { ...byUid, role: normalizeRole(byUid.role) };
+  return null;
+}
   return null;
 }
 
