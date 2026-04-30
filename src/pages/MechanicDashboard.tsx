@@ -44,7 +44,7 @@ const MECHANIC_TOUR_STEPS: TourStep[] = [
   {
     targetId: 'search-filter-bar',
     title: 'Search & Filter',
-    description: 'Search by customer name, license plate or job ID. Use the tabs to filter by status: All, My Jobs, Booked, In Progress, or Completed.',
+    description: 'Search by customer name, license plate or job ID. Use the tabs to filter by status: All, Booked, In Progress, or Completed.',
     placement: 'bottom',
   },
   {
@@ -346,12 +346,12 @@ const MechanicDashboard = () => {
   const activeJobs = myJobs.filter(
     j => j.status !== 'completed' &&
     matchesSearch(j) &&
-    (statusFilter === 'all' || statusFilter === 'my_jobs' || j.status === statusFilter)
+    (statusFilter === 'all' || j.status === statusFilter)
   );
   const completedJobs = myJobs.filter(
     j => j.status === 'completed' &&
     matchesSearch(j) &&
-    (statusFilter === 'all' || statusFilter === 'my_jobs' || statusFilter === 'completed')
+    (statusFilter === 'all' || statusFilter === 'completed')
   );
   const inProgressCount = myJobs.filter(j => j.status === 'in_progress').length;
   const bookedCount = myJobs.filter(j => j.status === 'booked').length;
@@ -360,7 +360,6 @@ const MechanicDashboard = () => {
   // Tab definitions for the filter bar
   const filterTabs = [
     { key: 'all',         label: 'All Jobs',    count: allJobs.length,                                          color: 'text-primary',  dot: 'bg-primary' },
-    { key: 'my_jobs',     label: 'My Jobs',     count: myJobs.length,                                           color: 'text-success',  dot: 'bg-success' },
     { key: 'booked',      label: 'Booked',      count: allJobs.filter(j => j.status === 'booked').length,       color: 'text-primary',  dot: 'bg-primary' },
     { key: 'in_progress', label: 'In Progress', count: allJobs.filter(j => j.status === 'in_progress').length,  color: 'text-warning',  dot: 'bg-warning' },
     { key: 'completed',   label: 'Completed',   count: allJobs.filter(j => j.status === 'completed').length,    color: 'text-success',  dot: 'bg-success' },
