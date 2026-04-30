@@ -1,4 +1,4 @@
-import { useState, useCallback } from 'react';
+import { useState, useCallback, useEffect } from 'react';
 
 export interface TourStep {
   /** id of the DOM element to spotlight */
@@ -11,12 +11,30 @@ export interface TourStep {
 
 const TOUR_KEY_PREFIX = 'royal_tyres_tour_seen_';
 
-export function useTour(role: 'mechanic' | 'admin', steps: TourStep[]) {
-  const storageKey = `${TOUR_KEY_PREFIX}${role}`;
-  const [isOpen, setIsOpen] = useState<boolean>(() => {
-    try { return localStorage.getItem(storageKey) !== 'true'; } catch { return false; }
-  });
+/**
+ * Controls the guided tour.
+ * The tour auto-opens exactly once per user per device (tracked in localStorage).
+ * Passing `userId` scopes the key per user so different accounts on the same device
+ * each see their own first-visit tour.
+ */
+export function useTour(role: 'mechanic' | 'admin', steps: TourStep[], userId?: string) {
+  // Key is user-specific once userId is known; falls back to role-only until then.
+  const storageKey = `${TOUR_KEY_PREFIX}${role}${userId ? `_${userId}` : ''}`;
+
+  // Start closed — the effect below opens it on first visit to avoid a flash.
+  const [isOpen, setIsOpen] = useState(false);
   const [stepIdx, setStepIdx] = useState(0);
+
+  // Open automatically only if this user hasn't seen the tour yet.
+  // Re-runs whenever storageKey changes (i.e., when userId resolves from undefined → value).
+  useEffect(() => {
+    if (!userId) return; // wait until we have a real user ID
+    try {
+      if (localStorage.getItem(storageKey) !== 'true') {
+        setIsOpen(true);
+      }
+    } catch {}
+  }, [storageKey, userId]);
 
   const startTour = useCallback(() => {
     setStepIdx(0);

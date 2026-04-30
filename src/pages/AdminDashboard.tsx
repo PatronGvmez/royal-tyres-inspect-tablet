@@ -71,7 +71,7 @@ const AdminDashboard = () => {
   const navigate = useNavigate();
   const queryClient = useQueryClient();
 
-  const tour = useTour('admin', ADMIN_TOUR_STEPS);
+  const tour = useTour('admin', ADMIN_TOUR_STEPS, user?.id);
 
   const [nudgeJob, setNudgeJob] = useState<JobCard | null>(null);
   const [nudgeMessage, setNudgeMessage] = useState('');

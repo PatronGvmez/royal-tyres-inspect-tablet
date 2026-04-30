@@ -190,7 +190,7 @@ const MechanicDashboard = () => {
   const navigate = useNavigate();
   const queryClient = useQueryClient();
 
-  const tour = useTour('mechanic', MECHANIC_TOUR_STEPS);
+  const tour = useTour('mechanic', MECHANIC_TOUR_STEPS, user?.id);
 
   const [showAddModal, setShowAddModal] = useState(false);
   const [selectedCompleted, setSelectedCompleted] = useState<JobCard | null>(null);
