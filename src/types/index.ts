@@ -23,6 +23,12 @@ export interface JobCard {
   view_photos?: Partial<Record<'front' | 'rear' | 'left' | 'right' | 'top', string>>;
   /** ID of the mechanic who created / owns this job */
   mechanic_id?: string;
+  /** Compressed base64 photo of the license plate (taken at job creation) */
+  license_plate_photo?: string;
+  /** Compressed base64 photo of the license disk — optional */
+  disk_photo?: string;
+  /** Odometer reading in km at time of job creation */
+  odometer?: number;
   /** Firestore server timestamp — seconds + nanoseconds, or raw ms number */
   created_at?: { seconds: number; nanoseconds: number } | number | string;
   updated_at?: string;

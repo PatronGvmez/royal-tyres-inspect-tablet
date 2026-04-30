@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, useRef } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { motion } from 'framer-motion';
@@ -108,6 +108,38 @@ const BODY_TO_VEHICLE_TYPE: Record<string, string> = Object.fromEntries(
 );
 const BODY_STYLE_OPTIONS = ['Sedan', 'Hatchback', 'SUV', 'Bakkie', 'Truck'];
 
+const SERVICE_OPTIONS = [
+  'Tyre Replacement',
+  'Wheel Alignment',
+  'Tyre Rotation & Balancing',
+  'Other',
+];
+
+function compressImage(dataUrl: string, maxDim = 1024, quality = 0.75): Promise<string> {
+  return new Promise((resolve) => {
+    const img = new Image();
+    img.onload = () => {
+      let { width, height } = img;
+      if (width > maxDim || height > maxDim) {
+        if (width >= height) {
+          height = Math.round((height / width) * maxDim);
+          width = maxDim;
+        } else {
+          width = Math.round((width / height) * maxDim);
+          height = maxDim;
+        }
+      }
+      const canvas = document.createElement('canvas');
+      canvas.width = width;
+      canvas.height = height;
+      canvas.getContext('2d')!.drawImage(img, 0, 0, width, height);
+      resolve(canvas.toDataURL('image/jpeg', quality));
+    };
+    img.onerror = () => resolve(dataUrl);
+    img.src = dataUrl;
+  });
+}
+
 const vehicleTypeOptions = [
   { value: 'sedan',    label: 'Sedan'     },
   { value: 'hatchback',label: 'Hatchback' },
@@ -170,9 +202,15 @@ const MechanicDashboard = () => {
     customer_name: '',
     license_plate: '',
     service_details: '',
+    service_type: '',
+    odometer: '',
     vehicle_type: 'sedan',
     model: VEHICLE_TYPE_TO_BODY['sedan'],
   });
+  const [platePhoto, setPlatePhoto] = useState<string | null>(null);
+  const [diskPhoto, setDiskPhoto] = useState<string | null>(null);
+  const plateInputRef = useRef<HTMLInputElement>(null);
+  const diskInputRef = useRef<HTMLInputElement>(null);
 
   const { data: allJobs = [], isLoading, isError } = useQuery({
     queryKey: ['jobs'],
@@ -216,22 +254,31 @@ const MechanicDashboard = () => {
   });
 
   const addJobMutation = useMutation({
-    mutationFn: (data: typeof form) =>
-      createJobCard({
+    mutationFn: (data: typeof form) => {
+      const serviceDetails = data.service_type === 'Other'
+        ? data.service_details.trim()
+        : data.service_type;
+      return createJobCard({
         vehicle_id: `V-${Date.now()}`,
         customer_name: data.customer_name.trim(),
         license_plate: data.license_plate.trim().toUpperCase(),
-        service_details: data.service_details.trim(),
+        service_details: serviceDetails,
         status: 'booked',
         vehicle_type: data.vehicle_type,
         model: data.model.trim() || undefined,
         mechanic_id: user?.id,
-      }),
+        license_plate_photo: platePhoto ?? undefined,
+        disk_photo: diskPhoto ?? undefined,
+        odometer: data.odometer ? Number(data.odometer) : undefined,
+      });
+    },
     onSuccess: (newJob) => {
       queryClient.invalidateQueries({ queryKey: ['jobs'] });
       toast.success('Job created! Capture vehicle photos next.');
       setShowAddModal(false);
-      setForm({ customer_name: '', license_plate: '', service_details: '', vehicle_type: 'sedan', model: VEHICLE_TYPE_TO_BODY['sedan'] });
+      setForm({ customer_name: '', license_plate: '', service_details: '', service_type: '', odometer: '', vehicle_type: 'sedan', model: VEHICLE_TYPE_TO_BODY['sedan'] });
+      setPlatePhoto(null);
+      setDiskPhoto(null);
       setPreviewIdx(0);
       navigate(`/mechanic/photo-upload/${newJob.id}`);
     },
@@ -271,7 +318,9 @@ const MechanicDashboard = () => {
   const handleSubmit = () => {
     if (!form.customer_name.trim()) { toast.error('Customer name is required'); return; }
     if (!form.license_plate.trim()) { toast.error('License plate is required'); return; }
-    if (!form.service_details.trim()) { toast.error('Service details are required'); return; }
+    if (!platePhoto) { toast.error('License plate photo is required'); return; }
+    if (!form.service_type) { toast.error('Please select a service'); return; }
+    if (form.service_type === 'Other' && !form.service_details.trim()) { toast.error('Please describe the service required'); return; }
     addJobMutation.mutate(form);
   };
 
@@ -1149,12 +1198,116 @@ const MechanicDashboard = () => {
                     <Hash className="w-3 h-3 text-muted-foreground" />
                     License Plate <span className="text-accent">*</span>
                   </label>
+                  <div className="flex gap-2">
+                    <input
+                      type="text"
+                      value={form.license_plate}
+                      onChange={e => setForm(f => ({ ...f, license_plate: e.target.value.toUpperCase() }))}
+                      placeholder="e.g. KZN 778-PRY"
+                      className={`${inputCls} font-mono tracking-widest flex-1`}
+                    />
+                    {/* Plate photo capture button */}
+                    <button
+                      type="button"
+                      title="Capture license plate photo"
+                      onClick={() => plateInputRef.current?.click()}
+                      className={`flex-shrink-0 flex items-center justify-center w-10 h-10 rounded-lg border transition-all ${
+                        platePhoto
+                          ? 'bg-primary border-primary text-primary-foreground'
+                          : 'border-input bg-background text-muted-foreground hover:bg-muted hover:text-foreground'
+                      }`}
+                    >
+                      <Camera className="w-4 h-4" />
+                    </button>
+                    <input
+                      ref={plateInputRef}
+                      type="file"
+                      accept="image/*"
+                      capture="environment"
+                      className="hidden"
+                      onChange={async (e) => {
+                        const file = e.target.files?.[0];
+                        if (!file) return;
+                        const reader = new FileReader();
+                        reader.onload = async (ev) => {
+                          const raw = ev.target?.result as string;
+                          setPlatePhoto(await compressImage(raw));
+                        };
+                        reader.readAsDataURL(file);
+                        e.target.value = '';
+                      }}
+                    />
+                  </div>
+                  {platePhoto && (
+                    <div className="mt-2 relative w-24 h-14 rounded-lg overflow-hidden border border-primary/40 group">
+                      <img src={platePhoto} alt="Plate" className="w-full h-full object-cover" />
+                      <button
+                        type="button"
+                        onClick={() => setPlatePhoto(null)}
+                        className="absolute top-0.5 right-0.5 p-0.5 rounded-full bg-black/60 text-white opacity-0 group-hover:opacity-100 transition-opacity"
+                      >
+                        <X className="w-3 h-3" />
+                      </button>
+                    </div>
+                  )}
+                  {!platePhoto && (
+                    <p className="text-[11px] text-muted-foreground mt-1">Tap the camera icon to capture plate photo (required)</p>
+                  )}
+                </div>
+
+                {/* License Disk — optional */}
+                <div>
+                  <label className="flex items-center gap-1.5 text-xs font-semibold text-foreground mb-1.5">
+                    <Camera className="w-3 h-3 text-muted-foreground" />
+                    License Disk <span className="text-[10px] font-normal text-muted-foreground ml-1">(optional)</span>
+                  </label>
+                  {diskPhoto ? (
+                    <div className="flex items-center gap-3">
+                      <div className="relative w-24 h-14 rounded-lg overflow-hidden border border-border group">
+                        <img src={diskPhoto} alt="Disk" className="w-full h-full object-cover" />
+                        <button
+                          type="button"
+                          onClick={() => setDiskPhoto(null)}
+                          className="absolute top-0.5 right-0.5 p-0.5 rounded-full bg-black/60 text-white opacity-0 group-hover:opacity-100 transition-opacity"
+                        >
+                          <X className="w-3 h-3" />
+                        </button>
+                      </div>
+                      <button
+                        type="button"
+                        onClick={() => diskInputRef.current?.click()}
+                        className="text-xs text-primary hover:underline"
+                      >
+                        Retake
+                      </button>
+                    </div>
+                  ) : (
+                    <button
+                      type="button"
+                      onClick={() => diskInputRef.current?.click()}
+                      className="w-full flex items-center justify-center gap-2 py-2.5 rounded-lg border border-dashed border-input text-xs text-muted-foreground hover:border-primary hover:text-primary transition-colors"
+                    >
+                      <Camera className="w-3.5 h-3.5" />
+                      Capture License Disk Photo
+                    </button>
+                  )}
                   <input
-                    type="text"
-                    value={form.license_plate}
-                    onChange={e => setForm(f => ({ ...f, license_plate: e.target.value.toUpperCase() }))}
-                    placeholder="e.g. KZN 778-PRY"
-                    className={`${inputCls} font-mono tracking-widest`}
+                    ref={diskInputRef}
+                    type="file"
+                    accept="image/*"
+                    capture="environment"
+                    className="hidden"
+                    onChange={async (e) => {
+                      const file = e.target.files?.[0];
+                      if (!file) return;
+                      const reader = new FileReader();
+                      reader.onload = async (ev) => {
+                        const raw = ev.target?.result as string;
+                        setDiskPhoto(await compressImage(raw));
+                      };
+                      reader.readAsDataURL(file);
+                      e.target.value = '';
+                    }}
                   />
                 </div>
 
@@ -1177,18 +1330,46 @@ const MechanicDashboard = () => {
                   </select>
                 </div>
 
-                {/* Service Details */}
+                {/* Service Required */}
                 <div>
                   <label className="flex items-center gap-1.5 text-xs font-semibold text-foreground mb-1.5">
                     <FileText className="w-3 h-3 text-muted-foreground" />
                     Service Required <span className="text-accent">*</span>
                   </label>
-                  <textarea
-                    value={form.service_details}
-                    onChange={e => setForm(f => ({ ...f, service_details: e.target.value }))}
-                    placeholder="e.g. Replace 4x Tyres & Wheel Alignment"
-                    rows={3}
-                    className={`${inputCls} resize-none`}
+                  <select
+                    value={form.service_type}
+                    onChange={e => setForm(f => ({ ...f, service_type: e.target.value, service_details: '' }))}
+                    className={inputCls}
+                  >
+                    <option value="">Select a service…</option>
+                    {SERVICE_OPTIONS.map(opt => (
+                      <option key={opt} value={opt}>{opt}</option>
+                    ))}
+                  </select>
+                  {form.service_type === 'Other' && (
+                    <textarea
+                      value={form.service_details}
+                      onChange={e => setForm(f => ({ ...f, service_details: e.target.value }))}
+                      placeholder="Describe the service required…"
+                      rows={2}
+                      className={`${inputCls} resize-none mt-2`}
+                    />
+                  )}
+                </div>
+
+                {/* Odometer */}
+                <div>
+                  <label className="flex items-center gap-1.5 text-xs font-semibold text-foreground mb-1.5">
+                    <Gauge className="w-3 h-3 text-muted-foreground" />
+                    Odometer (km) <span className="text-[10px] font-normal text-muted-foreground ml-1">(optional)</span>
+                  </label>
+                  <input
+                    type="number"
+                    min={0}
+                    value={form.odometer}
+                    onChange={e => setForm(f => ({ ...f, odometer: e.target.value }))}
+                    placeholder="e.g. 45000"
+                    className={inputCls}
                   />
                 </div>
 
