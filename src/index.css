@@ -10,6 +10,7 @@
 html { font-size: 16px; }
 @media (min-width: 768px)  { html { font-size: 14.5px; } }
 @media (min-width: 1024px) { html { font-size: 14px;   } }
+@media (min-width: 1536px) { html { font-size: 15px;   } }
 
 @layer base {
   :root {
@@ -213,48 +214,4 @@ html { font-size: 16px; }
   }
 }
 
-/* ─── Portrait-mode overlay ──────────────────────────────────────────────────
-   Full-screen game-style lock screen. No animation. No card. Pure static.
-   Dismissed automatically when device enters landscape. */
-@media (orientation: portrait) and (max-width: 1024px) {
-  #portrait-overlay {
-    display: flex !important;
-  }
-}
 
-#portrait-overlay {
-  display: none;
-  position: fixed;
-  inset: 0;
-  z-index: 99999;
-  background: #0d0d0f;
-  flex-direction: column;
-  align-items: center;
-  justify-content: center;
-  gap: 2rem;
-  text-align: center;
-}
-
-#portrait-overlay svg {
-  width: 120px;
-  height: 72px;
-  color: #ffffff;
-  opacity: 0.85;
-}
-
-#portrait-overlay p.title {
-  font-family: 'Space Grotesk', sans-serif;
-  font-size: 1.35rem;
-  font-weight: 700;
-  color: #ffffff;
-  margin: 0;
-  letter-spacing: 0.08em;
-  text-transform: uppercase;
-}
-
-#portrait-overlay p.subtitle {
-  font-size: 0.8rem;
-  color: rgba(255, 255, 255, 0.38);
-  margin: 0;
-  letter-spacing: 0.02em;
-}

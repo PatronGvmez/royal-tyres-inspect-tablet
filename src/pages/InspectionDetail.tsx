@@ -8,7 +8,7 @@ import { generateInspectionPDF } from '@/lib/pdfExport';
 import { 
   ChevronLeft, Car, Fuel, Gauge, Calendar, Clock, 
   User as UserIcon, FileText, AlertTriangle, CheckCircle, Loader2,
-  ClipboardList, Printer, Circle, Wrench
+  ClipboardList, Printer, Circle, Wrench, X, ZoomIn
 } from 'lucide-react';
 import Navbar from '@/components/layout/Navbar';
 import CarDiagram from '@/components/inspection/CarDiagram';
@@ -67,6 +67,7 @@ const InspectionDetail = () => {
   const preServiceReport = report ?? null;
 
   const [isGeneratingPdf, setIsGeneratingPdf] = useState(false);
+  const [lightboxSrc, setLightboxSrc] = useState<string | null>(null);
 
   const handleExportPdf = async () => {
     if (!job) return;
@@ -136,7 +137,7 @@ const InspectionDetail = () => {
           userName={user?.name}
           role="Admin"
           onLogout={() => { logout(); navigate('/'); }}
-          maxWidth="max-w-6xl"
+          maxWidth="max-w-[1600px]"
         />
         <div className="flex items-center justify-center py-24">
           <Loader2 className="w-8 h-8 animate-spin text-muted-foreground" />
@@ -152,9 +153,9 @@ const InspectionDetail = () => {
           userName={user?.name}
           role="Admin"
           onLogout={() => { logout(); navigate('/'); }}
-          maxWidth="max-w-6xl"
+          maxWidth="max-w-[1600px]"
         />
-        <div className="p-6 max-w-6xl mx-auto">
+        <div className="p-6 max-w-[1600px] mx-auto">
           <button
             onClick={() => navigate('/admin')}
             className="flex items-center gap-1 text-sm text-muted-foreground hover:text-foreground mb-4 transition-colors"
@@ -177,10 +178,10 @@ const InspectionDetail = () => {
         userName={user?.name}
         role="Admin"
         onLogout={() => { logout(); navigate('/'); }}
-        maxWidth="max-w-6xl"
+        maxWidth="max-w-[1600px]"
       />
 
-      <div className="p-4 sm:p-6 max-w-6xl mx-auto space-y-5">
+      <div className="p-4 sm:p-6 max-w-[1600px] mx-auto space-y-5">
         {/* Back + Export row */}
         <div className="flex items-center justify-between">
           <button
@@ -256,21 +257,36 @@ const InspectionDetail = () => {
                 )}
               </div>
               {/* Intake photos */}
-              {(job.license_plate_photo || job.disk_photo) && (
+              {(job.license_plate_photo || job.disk_photo || job.odometer_photo) && (
                 <div className="mt-3 pt-3 border-t border-border">
                   <p className="text-[10px] font-semibold uppercase tracking-widest text-muted-foreground mb-2">Intake Photos</p>
-                  <div className="grid grid-cols-2 gap-2">
+                  <div className={`grid gap-2 ${[job.license_plate_photo, job.disk_photo, job.odometer_photo].filter(Boolean).length === 3 ? 'grid-cols-3' : 'grid-cols-2'}`}>
                     {job.license_plate_photo && (
-                      <a href={job.license_plate_photo} target="_blank" rel="noreferrer" className="block">
-                        <img src={job.license_plate_photo} alt="License plate" className="w-full h-16 object-cover rounded-lg border border-border" />
+                      <button type="button" onClick={() => setLightboxSrc(job.license_plate_photo!)} className="block text-left group relative">
+                        <img src={job.license_plate_photo} alt="License plate" className="w-full h-24 object-cover rounded-xl border border-border" />
+                        <div className="absolute inset-0 rounded-xl bg-black/0 group-hover:bg-black/20 transition-colors flex items-center justify-center">
+                          <ZoomIn className="w-5 h-5 text-white opacity-0 group-hover:opacity-100 transition-opacity drop-shadow" />
+                        </div>
                         <p className="text-[10px] text-muted-foreground mt-0.5 text-center">Plate</p>
-                      </a>
+                      </button>
                     )}
                     {job.disk_photo && (
-                      <a href={job.disk_photo} target="_blank" rel="noreferrer" className="block">
-                        <img src={job.disk_photo} alt="License disk" className="w-full h-16 object-cover rounded-lg border border-border" />
+                      <button type="button" onClick={() => setLightboxSrc(job.disk_photo!)} className="block text-left group relative">
+                        <img src={job.disk_photo} alt="License disk" className="w-full h-24 object-cover rounded-xl border border-border" />
+                        <div className="absolute inset-0 rounded-xl bg-black/0 group-hover:bg-black/20 transition-colors flex items-center justify-center">
+                          <ZoomIn className="w-5 h-5 text-white opacity-0 group-hover:opacity-100 transition-opacity drop-shadow" />
+                        </div>
                         <p className="text-[10px] text-muted-foreground mt-0.5 text-center">License Disk</p>
-                      </a>
+                      </button>
+                    )}
+                    {job.odometer_photo && (
+                      <button type="button" onClick={() => setLightboxSrc(job.odometer_photo!)} className="block text-left group relative">
+                        <img src={job.odometer_photo} alt="Odometer" className="w-full h-24 object-cover rounded-xl border border-border" />
+                        <div className="absolute inset-0 rounded-xl bg-black/0 group-hover:bg-black/20 transition-colors flex items-center justify-center">
+                          <ZoomIn className="w-5 h-5 text-white opacity-0 group-hover:opacity-100 transition-opacity drop-shadow" />
+                        </div>
+                        <p className="text-[10px] text-muted-foreground mt-0.5 text-center">Odometer</p>
+                      </button>
                     )}
                   </div>
                 </div>
@@ -356,14 +372,37 @@ const InspectionDetail = () => {
             type="Pre-Service"
             photos={photos as Record<string, string>}
             vehicleType={job.vehicle_type ?? 'sedan'}
+            onImageClick={setLightboxSrc}
           />
         )}
       </div>
+
+      {/* ── In-app photo lightbox ── */}
+      {lightboxSrc && (
+        <div
+          className="fixed inset-0 z-[9999] flex items-center justify-center bg-black/85 backdrop-blur-sm p-4"
+          onClick={() => setLightboxSrc(null)}
+        >
+          <button
+            className="absolute top-4 right-4 p-2 rounded-full bg-white/10 hover:bg-white/20 text-white transition-colors"
+            onClick={() => setLightboxSrc(null)}
+            aria-label="Close"
+          >
+            <X className="w-5 h-5" />
+          </button>
+          <img
+            src={lightboxSrc}
+            alt="Photo"
+            className="max-w-full max-h-full rounded-xl shadow-2xl object-contain"
+            onClick={e => e.stopPropagation()}
+          />
+        </div>
+      )}
     </div>
   );
 };
 
-const ReportCard = ({ report, type, photos, vehicleType = 'sedan' }: { report: InspectionReport; type: string; photos?: Record<string, string>; vehicleType?: string }) => {
+const ReportCard = ({ report, type, photos, vehicleType = 'sedan', onImageClick }: { report: InspectionReport; type: string; photos?: Record<string, string>; vehicleType?: string; onImageClick?: (src: string) => void }) => {
   const [showDamageMap, setShowDamageMap] = useState(true);
 
   const tyreOverlays = (() => {
@@ -516,9 +555,17 @@ const ReportCard = ({ report, type, photos, vehicleType = 'sedan' }: { report: I
               {report.damages.map((d, i) => (
                 <div key={i} className="flex items-center gap-3 px-3 py-2.5 bg-card">
                   {d.photo_url && (
-                    <a href={d.photo_url} target="_blank" rel="noreferrer" className="shrink-0 rounded-lg overflow-hidden border border-border" style={{ width: 48, height: 40 }}>
+                    <button
+                      type="button"
+                      onClick={() => onImageClick?.(d.photo_url!)}
+                      className="shrink-0 rounded-xl overflow-hidden border border-border group relative"
+                      style={{ width: 72, height: 60 }}
+                    >
                       <img src={d.photo_url} alt={`${d.part} close-up`} className="w-full h-full object-cover" />
-                    </a>
+                      <div className="absolute inset-0 bg-black/0 group-hover:bg-black/30 transition-colors flex items-center justify-center">
+                        <ZoomIn className="w-4 h-4 text-white opacity-0 group-hover:opacity-100 transition-opacity drop-shadow" />
+                      </div>
+                    </button>
                   )}
                   <div className="flex items-center gap-2 min-w-0 flex-1">
                     <Car className="w-3.5 h-3.5 text-muted-foreground shrink-0" />

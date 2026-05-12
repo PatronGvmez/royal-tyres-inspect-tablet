@@ -27,6 +27,8 @@ export interface JobCard {
   license_plate_photo?: string;
   /** Compressed base64 photo of the license disk — optional */
   disk_photo?: string;
+  /** Compressed base64 photo of the odometer at job creation — optional */
+  odometer_photo?: string;
   /** Odometer reading in km at time of job creation */
   odometer?: number;
   /** Firestore server timestamp — seconds + nanoseconds, or raw ms number */

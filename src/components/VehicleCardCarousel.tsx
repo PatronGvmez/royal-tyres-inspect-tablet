@@ -55,12 +55,11 @@ const VehicleCardCarousel = ({
 
   const renderSlide = (angle: ViewAngle) => {
     const photoUrl = photos[angle];
-    // Both photos and SVGs are constrained to the upper area, leaving bottom-6 clear for dots
     const content = photoUrl ? (
       <img
         src={photoUrl}
         alt={`${licensePlate} ${angle}`}
-        className="w-full h-full object-contain"
+        className="w-full h-full object-cover"
       />
     ) : (() => {
       const SVGComp = vehicleViewSVGs[type][angle];

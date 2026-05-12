@@ -83,7 +83,28 @@ const DamageModal: React.FC<DamageModalProps> = ({ onSubmit, onClose, view, init
     const file = e.target.files?.[0];
     if (!file) return;
     const reader = new FileReader();
-    reader.onload = ev => setPhotoUrl(ev.target?.result as string);
+    reader.onload = ev => {
+      const dataUrl = ev.target?.result as string;
+      // Resize to max 800 px and compress to JPEG 0.5 before storing.
+      // A raw camera photo can be 3–5 MB; this brings it under ~80 KB,
+      // keeping the Firestore document well within the 1 MB limit.
+      const img = new Image();
+      img.onload = () => {
+        const MAX = 800;
+        let w = img.width;
+        let h = img.height;
+        if (w > MAX || h > MAX) {
+          if (w > h) { h = Math.round(h * MAX / w); w = MAX; }
+          else { w = Math.round(w * MAX / h); h = MAX; }
+        }
+        const canvas = document.createElement('canvas');
+        canvas.width = w;
+        canvas.height = h;
+        canvas.getContext('2d')!.drawImage(img, 0, 0, w, h);
+        setPhotoUrl(canvas.toDataURL('image/jpeg', 0.5));
+      };
+      img.src = dataUrl;
+    };
     reader.readAsDataURL(file);
     // reset so same file can be re-selected
     e.target.value = '';

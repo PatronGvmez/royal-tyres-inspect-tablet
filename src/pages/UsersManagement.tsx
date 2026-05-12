@@ -74,11 +74,11 @@ const UsersManagement = () => {
         userName={user?.name}
         role="Admin"
         onLogout={() => { logout(); navigate('/'); }}
-        maxWidth="max-w-6xl"
+        maxWidth="max-w-[1600px]"
         showProfile
       />
 
-      <div className="p-4 sm:p-6 max-w-6xl mx-auto">
+      <div className="p-4 sm:p-6 max-w-[1600px] mx-auto">
         {/* Back Button */}
         <button
           onClick={() => navigate('/admin')}

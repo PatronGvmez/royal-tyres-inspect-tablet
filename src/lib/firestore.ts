@@ -13,7 +13,8 @@ import {
   serverTimestamp,
   Timestamp,
 } from 'firebase/firestore';
-import { db } from './firebase';
+import { ref, uploadBytes, getDownloadURL } from 'firebase/storage';
+import { db, storage } from './firebase';
 import { JobCard, InspectionReport, Inspection360, User, VehicleDamage } from '@/types';
 
 // ─── User Profiles ────────────────────────────────────────────────────────────
@@ -66,13 +67,48 @@ export async function acknowledgeJob(jobId: string, mechanicId: string): Promise
   });
 }
 
+/**
+ * Upload a base64-encoded photo to Firebase Storage and return the download URL.
+ * This avoids storing large images in Firestore documents (1 MB limit).
+ */
+export async function uploadPhotoToStorage(
+  base64Data: string,
+  storagePath: string
+): Promise<string> {
+  try {
+    // Convert base64 to Blob
+    const byteString = atob(base64Data.split(',')[1] || base64Data);
+    const ab = new ArrayBuffer(byteString.length);
+    const view = new Uint8Array(ab);
+    for (let i = 0; i < byteString.length; i++) {
+      view[i] = byteString.charCodeAt(i);
+    }
+    const blob = new Blob([ab], { type: 'image/jpeg' });
+
+    // Upload to storage
+    const photoRef = ref(storage, storagePath);
+    const snapshot = await uploadBytes(photoRef, blob);
+    const downloadUrl = await getDownloadURL(snapshot.ref);
+    return downloadUrl;
+  } catch (error) {
+    console.error('Failed to upload photo to storage:', error);
+    throw new Error(`Photo upload failed: ${error instanceof Error ? error.message : 'Unknown error'}`);
+  }
+}
+
 export async function createJobCard(
   job: Omit<JobCard, 'id'>
 ): Promise<JobCard> {
   const id = `JC-${Date.now()}`;
   const payload = { ...job, id };
+  
+  // Remove undefined values to keep document size under Firestore's 1 MB limit
+  const cleanPayload = Object.fromEntries(
+    Object.entries(payload).filter(([_, v]) => v !== undefined)
+  );
+  
   await setDoc(doc(db, 'jobs', id), {
-    ...payload,
+    ...cleanPayload,
     created_at: serverTimestamp(),
   });
   return payload;
@@ -226,14 +262,31 @@ export async function seedJobCards(jobs: JobCard[]): Promise<void> {
 // ─── Inspection Reports ───────────────────────────────────────────────────────
 
 export async function saveInspectionReport(report: InspectionReport): Promise<void> {
-  // Truncate very large signature blobs (> 200 KB) to avoid Firestore's 1 MB doc limit
-  const payload: InspectionReport = {
+  // Cap all signature blobs at 200 KB each to stay well under Firestore's 1 MB document limit.
+  const MAX_SIG = 204_800;
+  // Cap each damage photo at 100 KB — damage photos should already be compressed at upload
+  // time, but this is a backstop against old uncompressed photos that may be in state.
+  const MAX_PHOTO = 102_400;
+  const cap = (s: string | undefined, max: number) => (s && s.length > max ? s.slice(0, max) : s);
+  const truncated = {
     ...report,
-    signature_url:
-      report.signature_url && report.signature_url.length > 204_800
-        ? report.signature_url.slice(0, 204_800)
-        : report.signature_url,
+    signature_url: cap(report.signature_url, MAX_SIG),
+    mechanic_signature_url: cap(report.mechanic_signature_url, MAX_SIG),
+    customer_signature_url: cap(report.customer_signature_url, MAX_SIG),
+    damages: report.damages.map(d =>
+      d.photo_url ? { ...d, photo_url: cap(d.photo_url, MAX_PHOTO) } : d
+    ),
   };
+  // JSON round-trip strips ALL undefined values — top-level and nested inside objects/arrays.
+  // Prevents both "Unsupported field value: undefined" and
+  // "Property array contains an invalid nested entity" from Firestore.
+  const payload = JSON.parse(JSON.stringify(truncated)) as Record<string, unknown>;
+  console.log('[saveReport] sizes (bytes)', {
+    total: JSON.stringify(payload).length,
+    mechSig: (payload.mechanic_signature_url as string | undefined)?.length ?? 0,
+    custSig: (payload.customer_signature_url as string | undefined)?.length ?? 0,
+    damages: JSON.stringify(payload.damages).length,
+  });
   // Use job_card_id as the document ID so re-submissions always overwrite the
   // previous report for the same job — prevents stale old docs from being returned.
   await setDoc(doc(db, 'inspections', report.job_card_id), {
@@ -277,8 +330,21 @@ export async function saveInspectionDraft(
   jobId: string,
   draft: Omit<InspectionDraft, 'saved_at'>
 ): Promise<void> {
-  await setDoc(doc(db, 'inspection_drafts', jobId), {
+  // Cap each damage photo at 100 KB so the draft stays well under Firestore's 1 MB limit.
+  const MAX_PHOTO = 102_400;
+  const capped = {
     ...draft,
+    damages: draft.damages.map(d =>
+      d.photo_url && d.photo_url.length > MAX_PHOTO
+        ? { ...d, photo_url: d.photo_url.slice(0, MAX_PHOTO) }
+        : d
+    ),
+  };
+  // JSON round-trip strips undefined so Firestore never rejects the auto-save payload
+  // (damages array items have optional view/photo_url that can be undefined).
+  const payload = JSON.parse(JSON.stringify(capped)) as Record<string, unknown>;
+  await setDoc(doc(db, 'inspection_drafts', jobId), {
+    ...payload,
     saved_at: serverTimestamp(),
   });
 }

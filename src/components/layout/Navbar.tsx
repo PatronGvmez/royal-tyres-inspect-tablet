@@ -38,7 +38,7 @@ const Navbar = ({
   userName,
   role,
   onLogout,
-  maxWidth = 'max-w-6xl',
+  maxWidth = 'max-w-[1600px]',
   nudges = [],
   onDismissNudge,
   onAcknowledgeNudge,

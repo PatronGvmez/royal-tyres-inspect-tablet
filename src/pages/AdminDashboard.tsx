@@ -168,13 +168,13 @@ const AdminDashboard = () => {
         userName={user?.name}
         role="Admin"
         onLogout={() => { logout(); navigate('/'); }}
-        maxWidth="max-w-7xl"
+        maxWidth="max-w-[1600px]"
         showProfile
         onStartTour={tour.startTour}
       />
 
       {/* Kanban Board */}
-      <div className="pt-4 sm:pt-6 max-w-7xl mx-auto">
+      <div className="pt-4 sm:pt-6 max-w-[1600px] mx-auto">
         {/* Header — fixed padding */}
         <div id="job-board-header" className="flex items-center justify-between mb-4 px-4 sm:px-6">
           <h2 className="text-xl font-display font-bold text-foreground">Job Board</h2>

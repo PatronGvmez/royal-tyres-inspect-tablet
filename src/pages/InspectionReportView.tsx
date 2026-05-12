@@ -3,7 +3,7 @@ import { useParams, useNavigate } from 'react-router-dom';
 import { useQuery } from '@tanstack/react-query';
 import { fetchInspectionReport, fetchJobCardById, fetchJobPhotos, getUserProfile } from '@/lib/firestore';
 import { mockJobCards } from '@/data/mock';
-import { ArrowLeft, Loader2, Gauge, Fuel, Car, AlertTriangle, CheckCircle2, Sun, Moon, Wrench, User as UserIcon, Printer } from 'lucide-react';
+import { ArrowLeft, Loader2, Gauge, Fuel, Car, AlertTriangle, CheckCircle2, Sun, Moon, Wrench, User as UserIcon, Printer, X, ZoomIn } from 'lucide-react';
 import { User } from '@/types';
 import { buildTyreOverlays, TYRE_CONDITIONS } from '@/lib/tyreUtils';
 import { useTheme } from '@/hooks/use-theme';
@@ -23,6 +23,12 @@ const fuelLevelWidths: Record<string, string> = {
 const severityColor: Record<string, string> = {
   minor: 'bg-warning/10 text-warning border border-warning/30',
   major: 'bg-destructive/10 text-destructive border border-destructive/30',
+};
+
+const tyreConditionCls: Record<string, string> = {
+  very_bad: 'bg-destructive/10 border-destructive/30 text-destructive',
+  fair:     'bg-warning/10 border-warning/30 text-warning',
+  good:     'bg-success/10 border-success/30 text-success',
 };
 
 const InspectionReportView: React.FC = () => {
@@ -61,6 +67,7 @@ const InspectionReportView: React.FC = () => {
   const isLoading = jobLoading || reportLoading;
 
   const [isGeneratingPdf, setIsGeneratingPdf] = useState(false);
+  const [lightboxSrc, setLightboxSrc] = useState<string | null>(null);
 
   const handleExportPdf = async () => {
     if (!job) return;
@@ -128,7 +135,7 @@ const InspectionReportView: React.FC = () => {
     <div className="min-h-screen bg-background pb-12">
       {/* ── Header ── */}
       <header className="sticky top-0 z-30 bg-card border-b border-border">
-        <div className="max-w-6xl mx-auto px-4 sm:px-6 py-3 flex items-center gap-3">
+        <div className="max-w-[1600px] mx-auto px-4 sm:px-6 py-3 flex items-center gap-3">
           <button
             onClick={() => navigate('/mechanic')}
             className="p-2 -ml-2 rounded-lg text-muted-foreground hover:bg-muted transition-colors"
@@ -162,13 +169,22 @@ const InspectionReportView: React.FC = () => {
         </div>
       </header>
 
-      <div className="max-w-6xl mx-auto px-4 sm:px-6 py-6 space-y-4">
+      <div className="max-w-[1600px] mx-auto px-4 sm:px-6 py-6 space-y-4">
 
         {/* ── Vehicle Banner ── */}
         <div className="rounded-2xl overflow-hidden border border-border" style={{ background: 'var(--vehicle-card-bg, linear-gradient(135deg, hsl(var(--primary)/0.12), hsl(var(--accent)/0.08)))' }}>
-          <div className="relative h-36 flex items-center justify-center p-4" style={{ background: 'linear-gradient(135deg, hsl(var(--primary)/0.18) 0%, hsl(var(--accent)/0.10) 100%)' }}>
-            <VehicleImg className="h-28 w-auto drop-shadow-lg pointer-events-none" />
-            <div className="absolute top-3 left-3 flex items-center gap-1.5 bg-success/20 border border-success/40 text-success text-[10px] font-bold px-2.5 py-1 rounded-full">
+          <div className="relative h-48 overflow-hidden" style={!photos?.['front'] ? { background: 'linear-gradient(135deg, hsl(var(--primary)/0.18) 0%, hsl(var(--accent)/0.10) 100%)' } : undefined}>
+            {photos?.['front'] ? (
+              <>
+                <img src={photos['front']} alt="Front view" className="w-full h-full object-cover" />
+                <div className="absolute inset-0 bg-gradient-to-t from-black/50 via-transparent to-transparent pointer-events-none" />
+              </>
+            ) : (
+              <div className="h-full flex items-center justify-center p-4">
+                <VehicleImg className="h-28 w-auto drop-shadow-lg pointer-events-none" />
+              </div>
+            )}
+            <div className="absolute top-3 left-3 flex items-center gap-1.5 bg-success/20 border border-success/40 text-success text-[10px] font-bold px-2.5 py-1 rounded-full backdrop-blur-sm">
               <CheckCircle2 className="w-3 h-3" /> Completed
             </div>
             <div className="absolute top-3 right-3 text-[10px] font-mono bg-black/40 text-white px-2.5 py-1 rounded-full">{job.license_plate}</div>
@@ -193,21 +209,36 @@ const InspectionReportView: React.FC = () => {
         </div>
 
         {/* ── Intake Photos ── */}
-        {(job.license_plate_photo || job.disk_photo) && (
+        {(job.license_plate_photo || job.disk_photo || job.odometer_photo) && (
           <div className={sectionCls}>
             <p className={headingCls}>Intake Photos</p>
-            <div className="grid grid-cols-2 gap-3">
+            <div className={`grid gap-3 ${[job.license_plate_photo, job.disk_photo, job.odometer_photo].filter(Boolean).length === 3 ? 'grid-cols-3' : 'grid-cols-2'}`}>
               {job.license_plate_photo && (
-                <a href={job.license_plate_photo} target="_blank" rel="noreferrer" className="block">
+                <button type="button" onClick={() => setLightboxSrc(job.license_plate_photo!)} className="block text-left group relative">
                   <img src={job.license_plate_photo} alt="License plate" className="w-full h-24 object-cover rounded-xl border border-border" />
+                  <div className="absolute inset-0 rounded-xl bg-black/0 group-hover:bg-black/20 transition-colors flex items-center justify-center">
+                    <ZoomIn className="w-5 h-5 text-white opacity-0 group-hover:opacity-100 transition-opacity drop-shadow" />
+                  </div>
                   <p className="text-[11px] text-muted-foreground mt-1 text-center font-medium">License Plate</p>
-                </a>
+                </button>
               )}
               {job.disk_photo && (
-                <a href={job.disk_photo} target="_blank" rel="noreferrer" className="block">
+                <button type="button" onClick={() => setLightboxSrc(job.disk_photo!)} className="block text-left group relative">
                   <img src={job.disk_photo} alt="License disk" className="w-full h-24 object-cover rounded-xl border border-border" />
+                  <div className="absolute inset-0 rounded-xl bg-black/0 group-hover:bg-black/20 transition-colors flex items-center justify-center">
+                    <ZoomIn className="w-5 h-5 text-white opacity-0 group-hover:opacity-100 transition-opacity drop-shadow" />
+                  </div>
                   <p className="text-[11px] text-muted-foreground mt-1 text-center font-medium">License Disk</p>
-                </a>
+                </button>
+              )}
+              {job.odometer_photo && (
+                <button type="button" onClick={() => setLightboxSrc(job.odometer_photo!)} className="block text-left group relative">
+                  <img src={job.odometer_photo} alt="Odometer" className="w-full h-24 object-cover rounded-xl border border-border" />
+                  <div className="absolute inset-0 rounded-xl bg-black/0 group-hover:bg-black/20 transition-colors flex items-center justify-center">
+                    <ZoomIn className="w-5 h-5 text-white opacity-0 group-hover:opacity-100 transition-opacity drop-shadow" />
+                  </div>
+                  <p className="text-[11px] text-muted-foreground mt-1 text-center font-medium">Odometer</p>
+                </button>
               )}
             </div>
           </div>
@@ -306,16 +337,18 @@ const InspectionReportView: React.FC = () => {
                     ['Rear Left', report.tire_conditions.rear_left],
                     ['Rear Right', report.tire_conditions.rear_right],
                   ] as [string, string][]
-                ).map(([label, value]) => (
-                  <div key={label} className="p-3 rounded-xl bg-muted/50 border border-border">
-                    <p className={labelCls}>{label}</p>
-                    <p className={`${valueCls} mt-0.5`}>
-                      {value
-                        ? (TYRE_CONDITIONS.find(c => c.value === value)?.label ?? value)
-                        : <span className="text-muted-foreground italic font-normal">Not recorded</span>}
-                    </p>
-                  </div>
-                ))}
+                ).map(([label, value]) => {
+                  const condCls = tyreConditionCls[value] ?? 'bg-muted/50 border-border text-foreground';
+                  const condLabel = TYRE_CONDITIONS.find(c => c.value === value)?.label;
+                  return (
+                    <div key={label} className={`p-3 rounded-xl border ${condCls}`}>
+                      <p className="text-xs font-medium opacity-60">{label}</p>
+                      <p className="text-sm font-bold mt-0.5">
+                        {condLabel ?? (value || <span className="italic font-normal opacity-50">Not recorded</span>)}
+                      </p>
+                    </div>
+                  );
+                })}
               </div>
             </div>
 
@@ -330,7 +363,7 @@ const InspectionReportView: React.FC = () => {
                 )}
               </div>
 
-              {/* Read-only diagram — pointer events needed for tab buttons to work */}
+              {/* Read-only diagram — no overlay so view tabs still work */}
               <CarDiagram
                 damages={report.damages}
                 onAreaClick={() => {}}
@@ -348,9 +381,17 @@ const InspectionReportView: React.FC = () => {
                   {report.damages.map((d, i) => (
                     <div key={i} className="flex items-center gap-3 px-3 py-2.5 rounded-xl bg-muted/50 border border-border">
                       {d.photo_url && (
-                        <a href={d.photo_url} target="_blank" rel="noreferrer" className="shrink-0 rounded-lg overflow-hidden border border-border" style={{ width: 48, height: 40 }}>
+                        <button
+                          type="button"
+                          onClick={() => setLightboxSrc(d.photo_url!)}
+                          className="shrink-0 rounded-xl overflow-hidden border border-border group relative"
+                          style={{ width: 72, height: 60 }}
+                        >
                           <img src={d.photo_url} alt={`${d.part} close-up`} className="w-full h-full object-cover" />
-                        </a>
+                          <div className="absolute inset-0 bg-black/0 group-hover:bg-black/30 transition-colors flex items-center justify-center">
+                            <ZoomIn className="w-4 h-4 text-white opacity-0 group-hover:opacity-100 transition-opacity drop-shadow" />
+                          </div>
+                        </button>
                       )}
                       <div className="flex items-center gap-2 min-w-0 flex-1">
                         <Car className="w-3.5 h-3.5 text-muted-foreground shrink-0" />
@@ -383,7 +424,7 @@ const InspectionReportView: React.FC = () => {
                 </p>
               )}
               {report.mechanic_signature_url ? (
-                <div className="rounded-xl border border-border overflow-hidden bg-white p-2">
+                <div className="rounded-xl border border-border overflow-hidden p-3" style={{ background: '#ffffff' }}>
                   <img src={report.mechanic_signature_url} alt="Inspector signature" className="w-full max-h-40 object-contain" />
                 </div>
               ) : (
@@ -407,7 +448,7 @@ const InspectionReportView: React.FC = () => {
                 </p>
               )}
               {(report.customer_signature_url ?? report.signature_url) ? (
-                <div className="rounded-xl border border-border overflow-hidden bg-white p-2">
+                <div className="rounded-xl border border-border overflow-hidden p-3" style={{ background: '#ffffff' }}>
                   <img
                     src={report.customer_signature_url ?? report.signature_url}
                     alt="Customer signature"
@@ -423,6 +464,28 @@ const InspectionReportView: React.FC = () => {
           </>
         )}
       </div>
+
+      {/* ── In-app photo lightbox ── */}
+      {lightboxSrc && (
+        <div
+          className="fixed inset-0 z-[9999] flex items-center justify-center bg-black/85 backdrop-blur-sm p-4"
+          onClick={() => setLightboxSrc(null)}
+        >
+          <button
+            className="absolute top-4 right-4 p-2 rounded-full bg-white/10 hover:bg-white/20 text-white transition-colors"
+            onClick={() => setLightboxSrc(null)}
+            aria-label="Close"
+          >
+            <X className="w-5 h-5" />
+          </button>
+          <img
+            src={lightboxSrc}
+            alt="Photo"
+            className="max-w-full max-h-full rounded-xl shadow-2xl object-contain"
+            onClick={e => e.stopPropagation()}
+          />
+        </div>
+      )}
     </div>
   );
 };

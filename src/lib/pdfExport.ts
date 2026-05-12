@@ -1,157 +1,74 @@
-/**
- * pdfExport.ts — Royal Tyres Inspection PDF generator (max 2 pages, A4 portrait)
+﻿/**
+ * pdfExport.ts — Royal Tyres Inspection PDF  (modern redesign)
  *
- * Page 1: Header banner · job summary · vehicle info · intake photos ·
- *         tyre conditions grid · odometer/fuel · damage table
- * Page 2: Vehicle angle photos · damage map · damage photos · signatures
+ * Page 1: Header · hero summary card · vehicle info cards · intake photos ·
+ *         findings strip · tyre condition tiles · damage table
+ * Page 2: Vehicle angle photos · damage photos · signature cards · disclaimer
  */
 
 import { jsPDF } from 'jspdf';
-import { JobCard, InspectionReport, VehicleDamage, User } from '@/types';
+import { JobCard, InspectionReport, User } from '@/types';
 import { TYRE_CONDITIONS, TYRE_POSITIONS } from './tyreUtils';
-
-// ── Vehicle image map: type → view → { src, flip horizontally } ──────────────
-const VEHICLE_IMAGE_MAP: Record<string, Record<string, { src: string; flip: boolean }>> = {
-  sedan:     { front: { src: '/sedanfront.png',        flip: false },
-               rear:  { src: '/sedanback.png',         flip: false },
-               left:  { src: '/sedanright.png',        flip: true  },
-               right: { src: '/sedanright.png',        flip: false } },
-  hatchback: { front: { src: '/hatchback-front.png',   flip: false },
-               rear:  { src: '/hatchback-rear.png',    flip: false },
-               left:  { src: '/hatchback-left.png',    flip: false },
-               right: { src: '/hatchback-left.png',    flip: true  } },
-  suv:       { front: { src: '/SUV_Front.png',         flip: false },
-               rear:  { src: '/SUV_BACK.png',          flip: false },
-               left:  { src: '/SUV_LEFT_SIDE.png',     flip: false },
-               right: { src: '/SUV_LEFT_SIDE.png',     flip: true  } },
-  bakkie:    { front: { src: '/bakkie_front.png',      flip: false },
-               rear:  { src: '/bakkie_back.png',       flip: false },
-               left:  { src: '/bakkie_right_side.png', flip: true  },
-               right: { src: '/bakkie_right_side.png', flip: false } },
-  truck:     { front: { src: '/Truck_front.png',       flip: false },
-               rear:  { src: '/Truck_back.png',        flip: false },
-               left:  { src: '/Truck_left_side.png',   flip: false },
-               right: { src: '/Truck_left_side.png',   flip: true  } },
-};
-
-// Damage type → pin colour (hex)
-const DMG_PIN_COLORS: Record<string, string> = {
-  scratch: '#dc2626',
-  dent:    '#d97706',
-  crack:   '#7c3aed',
-};
-
-/**
- * Renders a vehicle diagram view onto an offscreen <canvas>: vehicle PNG with
- * object-contain scaling (+ optional flip) and numbered coloured damage pins.
- * Returns a PNG data-URL, or null if the vehicle image fails to load.
- */
-async function renderDiagramView(
-  vehicleType: string,
-  view: string,
-  pinDamages: Array<{ d: VehicleDamage; globalIndex: number }>,
-): Promise<string | null> {
-  const typeMap = VEHICLE_IMAGE_MAP[vehicleType?.toLowerCase()] ?? VEHICLE_IMAGE_MAP.suv;
-  const info = typeMap[view];
-  if (!info) return null;
-
-  const img = new Image();
-  img.crossOrigin = 'anonymous';
-  const loaded = await new Promise<boolean>(resolve => {
-    img.onload  = () => resolve(true);
-    img.onerror = () => resolve(false);
-    img.src = info.src;
-  });
-  if (!loaded) return null;
-
-  const CW2 = 400, CH2 = 300;
-  const canvas = document.createElement('canvas');
-  canvas.width = CW2; canvas.height = CH2;
-  const ctx = canvas.getContext('2d');
-  if (!ctx) return null;
-
-  // Light background matching the app diagram
-  ctx.fillStyle = '#f9fafb';
-  ctx.fillRect(0, 0, CW2, CH2);
-
-  // object-contain scaling
-  const scale = Math.min(CW2 / img.naturalWidth, CH2 / img.naturalHeight);
-  const dw = img.naturalWidth * scale, dh = img.naturalHeight * scale;
-  const ox = (CW2 - dw) / 2, oy = (CH2 - dh) / 2;
-
-  if (info.flip) {
-    ctx.save(); ctx.translate(CW2, 0); ctx.scale(-1, 1);
-    ctx.drawImage(img, CW2 - ox - dw, oy, dw, dh);
-    ctx.restore();
-  } else {
-    ctx.drawImage(img, ox, oy, dw, dh);
-  }
-
-  // Draw numbered coloured pins
-  pinDamages.forEach(({ d, globalIndex }) => {
-    const px = (d.coordinates.x / 100) * CW2;
-    const py = (d.coordinates.y / 100) * CH2;
-    const r  = d.severity === 'major' ? 12 : 9;
-    const color = DMG_PIN_COLORS[d.damage_type] ?? '#dc2626';
-
-    ctx.shadowColor = 'rgba(0,0,0,0.4)'; ctx.shadowBlur = 6;
-    // White halo
-    ctx.beginPath(); ctx.arc(px, py, r + 3, 0, Math.PI * 2);
-    ctx.fillStyle = 'rgba(255,255,255,0.9)'; ctx.fill();
-    ctx.shadowBlur = 0;
-    // Colour fill
-    ctx.beginPath(); ctx.arc(px, py, r, 0, Math.PI * 2);
-    ctx.fillStyle = color; ctx.fill();
-    // Number
-    ctx.fillStyle = '#ffffff';
-    ctx.font = `bold ${r >= 11 ? 13 : 11}px Arial,sans-serif`;
-    ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
-    ctx.fillText(String(globalIndex + 1), px, py);
-  });
-
-  return canvas.toDataURL('image/png');
-}
 
 // ── A4 portrait geometry (mm) ──────────────────────────────────────────────
 const PW    = 210;
 const PH    = 297;
-const M     = 14;           // margin → CW = 182
+const M     = 13;
 const CW    = PW - M * 2;
-const HDR_H = 18;
-const BODY_Y = HDR_H + 7;
-const FOOT_Y = PH - 7;
+const HDR_H = 23;
+const BODY_Y = HDR_H + 5;
+const FOOT_Y = PH - 4;
+const ROW   = 6;
 
 type RGB = [number, number, number];
 
+// ── Brand palette ──────────────────────────────────────────────────────────
 const C = {
-  navy:      [12,  28,  68]  as RGB,
-  navyLight: [26,  52, 110]  as RGB,
-  red:       [200, 30,  40]  as RGB,
-  redLight:  [254, 242, 242] as RGB,
-  success:   [22,  119, 60]  as RGB,
-  successBg: [240, 253, 244] as RGB,
-  warning:   [161, 72,   0]  as RGB,
-  warningBg: [255, 247, 237] as RGB,
-  error:     [180, 24,  24]  as RGB,
-  errorBg:   [254, 242, 242] as RGB,
-  text:      [15,  23,  42]  as RGB,
-  muted:     [100, 116, 139] as RGB,
-  mutedLt:   [148, 163, 184] as RGB,
-  border:    [226, 232, 240] as RGB,
-  bgLight:   [248, 250, 252] as RGB,
-  bgAlt:     [241, 245, 249] as RGB,
-  white:     [255, 255, 255] as RGB,
+  navy:       [8,   22,  60]  as RGB,
+  navyMid:    [16,  42,  96]  as RGB,
+  navyLight:  [28,  60, 130]  as RGB,
+  accent:     [216, 28,  42]  as RGB,
+  accentSoft: [255, 237, 238] as RGB,
+  accentBdr:  [252, 165, 165] as RGB,
+  gold:       [200, 150,  10]  as RGB,
+  goldBg:     [255, 251, 225] as RGB,
+  goldBdr:    [202, 168,  50]  as RGB,
+  success:    [14,  116,  56]  as RGB,
+  successBg:  [236, 253, 245] as RGB,
+  successBdr: [110, 231, 163] as RGB,
+  warning:    [146,  70,   0]  as RGB,
+  warningBg:  [255, 247, 237] as RGB,
+  warningBdr: [251, 191,  36]  as RGB,
+  error:      [180,  24,  24]  as RGB,
+  errorBg:    [254, 242, 242] as RGB,
+  errorBdr:   [252, 165, 165] as RGB,
+  text:       [14,  20,  38]  as RGB,
+  textMid:    [50,  60,  80]  as RGB,
+  muted:      [100, 112, 128] as RGB,
+  mutedLt:    [155, 165, 180] as RGB,
+  border:     [220, 228, 240] as RGB,
+  borderMid:  [196, 208, 224] as RGB,
+  bg:         [248, 249, 252] as RGB,
+  bgCard:     [255, 255, 255] as RGB,
+  bgAlt:      [242, 245, 250] as RGB,
+  bgDeep:     [232, 237, 246] as RGB,
+  white:      [255, 255, 255] as RGB,
 };
 
 const STATUS_COLORS: Record<string, RGB> = {
   completed:   C.success,
   in_progress: C.warning,
-  booked:      C.navy,
+  booked:      C.navyLight,
 };
 const STATUS_BG: Record<string, RGB> = {
   completed:   C.successBg,
   in_progress: C.warningBg,
-  booked:      [219, 234, 254] as RGB,
+  booked:      [216, 232, 255] as RGB,
+};
+const STATUS_BDR: Record<string, RGB> = {
+  completed:   C.successBdr,
+  in_progress: C.warningBdr,
+  booked:      C.navyLight,
 };
 const STATUS_LABELS: Record<string, string> = {
   completed:   'COMPLETED',
@@ -168,6 +85,11 @@ const TYRE_COND_BG: Record<string, RGB> = {
   fair:     C.warningBg,
   good:     C.successBg,
 };
+const TYRE_COND_BDR: Record<string, RGB> = {
+  very_bad: C.errorBdr,
+  fair:     C.warningBdr,
+  good:     C.successBdr,
+};
 const VIEW_LABELS: Record<string, string> = {
   front: 'Front View',
   rear:  'Rear View',
@@ -176,12 +98,16 @@ const VIEW_LABELS: Record<string, string> = {
   top:   'Top View',
 };
 
-// ── Colour helpers ────────────────────────────────────────────────────────
+// ── Low-level helpers ─────────────────────────────────────────────────────
 function tf(doc: jsPDF, c: RGB) { doc.setTextColor(c[0], c[1], c[2]); }
 function ff(doc: jsPDF, c: RGB) { doc.setFillColor(c[0], c[1], c[2]); }
 function df(doc: jsPDF, c: RGB) { doc.setDrawColor(c[0], c[1], c[2]); }
 
-// ── Date helpers ──────────────────────────────────────────────────────────
+/** Rounded rect shorthand (jsPDF 2.x API) */
+function rr(doc: jsPDF, x: number, y: number, w: number, h: number, r: number, style: string) {
+  doc.roundedRect(x, y, w, h, r, r, style);
+}
+
 function fmtDate(val?: unknown): string {
   if (!val) return 'N/A';
   let ms: number | null = null;
@@ -196,6 +122,7 @@ function fmtDate(val?: unknown): string {
     hour: '2-digit', minute: '2-digit',
   });
 }
+
 function fmtSigned(val?: string): string {
   if (!val) return '';
   const p = Date.parse(val);
@@ -205,7 +132,6 @@ function fmtSigned(val?: string): string {
   });
 }
 
-// ── Image helper ──────────────────────────────────────────────────────────
 function placeImage(doc: jsPDF, url: string | undefined, x: number, y: number, w: number, h: number): boolean {
   if (!url || url.length < 50) return false;
   try {
@@ -214,91 +140,99 @@ function placeImage(doc: jsPDF, url: string | undefined, x: number, y: number, w
   } catch { return false; }
 }
 
-// ── Page chrome ───────────────────────────────────────────────────────────
-function pageHeader(doc: jsPDF, pg: number, total: number, subtitle?: string) {
-  // Background
-  ff(doc, C.navy); doc.rect(0, 0, PW, HDR_H, 'F');
-  // Red accent line
-  ff(doc, C.red);  doc.rect(0, HDR_H, PW, 1.5, 'F');
+// ── Component helpers ─────────────────────────────────────────────────────
 
-  // Logo wordmark
-  doc.setFont('helvetica', 'bold'); doc.setFontSize(10); tf(doc, C.white);
-  doc.text('ROYAL TYRES', M, 11.5);
-
-  // Subtitle centred
-  if (subtitle) {
-    doc.setFont('helvetica', 'normal'); doc.setFontSize(6.5);
-    tf(doc, [150, 180, 220] as RGB);
-    doc.text(subtitle, PW / 2, 11.5, { align: 'center' });
-  }
-
-  // Page number
-  doc.setFont('helvetica', 'normal'); doc.setFontSize(7); tf(doc, [150, 180, 220] as RGB);
-  doc.text(`Page ${pg} / ${total}`, PW - M, 11.5, { align: 'right' });
+/** Pill badge centered at (cx, cy). */
+function pillBadge(doc: jsPDF, text: string, cx: number, cy: number, fg: RGB, bg: RGB, bdr: RGB) {
+  doc.setFont('helvetica', 'bold'); doc.setFontSize(6);
+  const tw = doc.getTextWidth(text);
+  const bw = tw + 7, bh = 5.5;
+  ff(doc, bg); df(doc, bdr); doc.setLineWidth(0.4);
+  rr(doc, cx - bw / 2, cy - bh / 2, bw, bh, 2.5, 'FD');
+  tf(doc, fg);
+  doc.text(text, cx, cy + 1.8, { align: 'center' });
 }
 
-function pageFooter(doc: jsPDF, jobId: string, generated: string) {
-  // Thin separator
-  ff(doc, C.bgAlt); doc.rect(0, PH - 10, PW, 10, 'F');
-  df(doc, C.border); doc.setLineWidth(0.3);
-  doc.line(0, PH - 10, PW, PH - 10);
-
-  doc.setFont('helvetica', 'normal'); doc.setFontSize(5.8); tf(doc, C.muted);
-  doc.text(`Job: ${jobId}`, M, FOOT_Y);
-  doc.text(`Generated: ${generated}`, PW / 2, FOOT_Y, { align: 'center' });
-  doc.text('Royal Tyres Inspection System', PW - M, FOOT_Y, { align: 'right' });
-}
-
-/** Draws a section heading with accent underline. Returns y after the heading. */
+/** Section heading — full-width accent pill bar. Returns new y. */
 function sectionHeading(doc: jsPDF, text: string, y: number): number {
-  // Pill background
-  const tw = doc.setFont('helvetica', 'bold').setFontSize(7).getTextWidth(text.toUpperCase());
-  ff(doc, C.bgAlt); doc.rect(M - 1, y - 4.5, tw + 10, 6.5, 'F');
-  // Left accent bar
-  ff(doc, C.red); doc.rect(M - 1, y - 4.5, 2.5, 6.5, 'F');
-  tf(doc, C.navy);
-  doc.text(text.toUpperCase(), M + 3, y);
-  // Full-width rule below
-  df(doc, C.border); doc.setLineWidth(0.3);
-  doc.line(M, y + 2.5, PW - M, y + 2.5);
+  const headH = 7.5;
+  ff(doc, C.bgAlt); doc.rect(M - 1, y - 5, CW + 2, headH, 'F');
+  ff(doc, C.accent); doc.rect(M - 1, y - 5, 3, headH, 'F');
+  doc.setFont('helvetica', 'bold'); doc.setFontSize(6.8); tf(doc, C.navy);
+  doc.text(text.trimStart().toUpperCase(), M + 4, y - 0.5);
+  df(doc, C.borderMid); doc.setLineWidth(0.25);
+  doc.line(M - 1, y + 2.5, PW - M + 1, y + 2.5);
   return y + 8;
 }
 
-/** Two-column key–value row. */
-function kv(doc: jsPDF, label: string, value: string, x: number, y: number, labelW = 26) {
-  doc.setFont('helvetica', 'normal'); doc.setFontSize(6.8); tf(doc, C.muted);
-  doc.text(label, x, y);
-  doc.setFont('helvetica', 'bold'); doc.setFontSize(7); tf(doc, C.text);
-  const maxW = CW / 2 - labelW - 4;
-  let v = value || 'N/A';
-  while (doc.getTextWidth(v) > maxW && v.length > 4) v = v.slice(0, -4) + '…';
-  doc.text(v, x + labelW, y);
-}
-
 /**
- * Image card: photo + dark caption bar.
- * Total height consumed = h + 7 mm.
+ * Photo card with rounded corners and navy caption bar.
+ * Returns the total height consumed (h + captionH).
  */
-function imageBox(doc: jsPDF, url: string | undefined, label: string, x: number, y: number, w: number, h: number) {
-  // Card shadow effect (thin dark border offset)
-  ff(doc, [210, 218, 230] as RGB); doc.rect(x + 0.6, y + 0.6, w, h + 7, 'F');
-  // Card body
-  ff(doc, C.bgLight); df(doc, C.border); doc.setLineWidth(0.2);
-  doc.rect(x, y, w, h + 7, 'FD');
+function imageCard(
+  doc: jsPDF,
+  url: string | undefined,
+  label: string,
+  x: number, y: number, w: number, h: number,
+  captionH = 7,
+): number {
+  const total = h + captionH;
+  ff(doc, C.bgDeep); rr(doc, x + 0.8, y + 0.8, w, total, 2.5, 'F');
+  ff(doc, C.bgCard); df(doc, C.border); doc.setLineWidth(0.2);
+  rr(doc, x, y, w, total, 2.5, 'FD');
   if (!placeImage(doc, url, x + 0.5, y + 0.5, w - 1, h - 1)) {
     ff(doc, C.bgAlt); doc.rect(x + 0.5, y + 0.5, w - 1, h - 1, 'F');
     doc.setFont('helvetica', 'italic'); doc.setFontSize(5.5); tf(doc, C.mutedLt);
-    doc.text('No image', x + w / 2, y + h / 2, { align: 'center' });
+    doc.text('No photo', x + w / 2, y + h / 2, { align: 'center' });
   }
-  // Caption bar
-  ff(doc, C.navy); doc.rect(x, y + h, w, 7, 'F');
+  ff(doc, C.navy); rr(doc, x, y + h, w, captionH, 2.5, 'F');
+  doc.rect(x, y + h, w, captionH / 2, 'F');
   doc.setFont('helvetica', 'bold'); doc.setFontSize(5.8); tf(doc, C.white);
   let lb = label;
-  while (doc.getTextWidth(lb) > w - 4 && lb.length > 4) lb = lb.slice(0, -4) + '…';
-  doc.text(lb, x + w / 2, y + h + 4.8, { align: 'center' });
+  while (doc.getTextWidth(lb) > w - 4 && lb.length > 4) lb = lb.slice(0, -4) + '...';
+  doc.text(lb, x + w / 2, y + h + captionH * 0.72, { align: 'center' });
+  return total;
 }
 
-// ── Public API ────────────────────────────────────────────────────────────
+/** Page header — printed once per page. */
+function pageHeader(doc: jsPDF, pg: number, total: number) {
+  ff(doc, C.navy); doc.rect(0, 0, PW, HDR_H, 'F');
+  df(doc, [16, 38, 88] as RGB); doc.setLineWidth(0.5);
+  for (let i = 0; i < 7; i++) {
+    const lx = PW - 52 + i * 12;
+    doc.line(lx, 0, lx - HDR_H * 0.6, HDR_H);
+  }
+  ff(doc, C.accent); doc.rect(0, HDR_H - 2, PW, 2, 'F');
+  ff(doc, C.accent); doc.circle(M + 6, HDR_H / 2, 6, 'F');
+  ff(doc, C.white); doc.circle(M + 6, HDR_H / 2, 4.2, 'F');
+  doc.setFont('helvetica', 'bold'); doc.setFontSize(6.5); tf(doc, C.accent);
+  doc.text('RT', M + 6, HDR_H / 2 + 2.2, { align: 'center' });
+  doc.setFont('helvetica', 'bold'); doc.setFontSize(11); tf(doc, C.white);
+  doc.text('ROYAL TYRES', M + 15, HDR_H / 2 + 1.5);
+  doc.setFont('helvetica', 'normal'); doc.setFontSize(5.8); tf(doc, [160, 190, 230] as RGB);
+  doc.text('PRE-SERVICE INSPECTION REPORT', M + 15, HDR_H / 2 + 7);
+  const pageTxt = `PAGE  ${pg} / ${total}`;
+  doc.setFont('helvetica', 'bold'); doc.setFontSize(6.5);
+  const pw2 = doc.getTextWidth(pageTxt) + 9;
+  ff(doc, C.navyMid); df(doc, C.navyLight); doc.setLineWidth(0.4);
+  rr(doc, PW - M - pw2, HDR_H / 2 - 4, pw2, 8, 2, 'FD');
+  tf(doc, C.white);
+  doc.text(pageTxt, PW - M - pw2 / 2, HDR_H / 2 + 1.5, { align: 'center' });
+}
+
+/** Page footer — printed once per page. */
+function pageFooter(doc: jsPDF, jobId: string, generated: string) {
+  ff(doc, C.bgAlt); doc.rect(0, PH - 9, PW, 9, 'F');
+  df(doc, C.borderMid); doc.setLineWidth(0.25);
+  doc.line(0, PH - 9, PW, PH - 9);
+  ff(doc, C.accent); doc.rect(0, PH - 9, 2.5, 9, 'F');
+  doc.setFont('helvetica', 'normal'); doc.setFontSize(5.5); tf(doc, C.muted);
+  doc.text(`Job ID: ${jobId}`, M, FOOT_Y);
+  doc.text('Royal Tyres Inspection System  |  Confidential Document', PW / 2, FOOT_Y, { align: 'center' });
+  doc.text(`Generated: ${generated}`, PW - M, FOOT_Y, { align: 'right' });
+}
+
+// ── Public API ─────────────────────────────────────────────────────────────
 
 export interface PDFExportData {
   job:      JobCard;
@@ -314,21 +248,18 @@ export async function generateInspectionPDF(
   const angleEntries = (Object.entries(photos) as [string, string][]).filter(([, u]) => !!u);
   const dmgPhotos    = (report?.damages ?? []).filter(d => !!d.photo_url).slice(0, 6);
 
-  // Pre-render damage diagrams
-  const viewsWithDamages = new Map<string, Array<{ d: VehicleDamage; globalIndex: number }>>();
-  (report?.damages ?? []).forEach((d, i) => {
-    if (!d.view || d.view === 'top') return;
-    if (!viewsWithDamages.has(d.view)) viewsWithDamages.set(d.view, []);
-    viewsWithDamages.get(d.view)!.push({ d, globalIndex: i });
-  });
-  const diagramCanvases = new Map<string, string>();
-  for (const [view, pins] of viewsWithDamages) {
-    const dataUrl = await renderDiagramView(job.vehicle_type ?? 'suv', view, pins);
-    if (dataUrl) diagramCanvases.set(view, dataUrl);
-  }
+  const hasPage2   = !!report || angleEntries.length > 0;
 
-  const hasPage2   = !!report || angleEntries.length > 0 || diagramCanvases.size > 0;
-  const totalPages = hasPage2 ? 2 : 1;
+  // Pre-estimate whether page 2 content overflows into a 3rd page.
+  // Vehicle photo rows × 46mm + damage photo rows × 36mm + signatures block ~84mm.
+  const CAPTION_H  = 7;  // imageCard default captionH
+  const PH_SAFE    = PH - HDR_H - 9 - (BODY_Y + 1); // usable height per page ≈ 260mm
+  const estP2H = (
+    (angleEntries.length > 0 ? 8 + Math.ceil(angleEntries.length / 2) * (32 + CAPTION_H + 14) + 4 : 0) +
+    (dmgPhotos.length > 0   ? 8 + Math.ceil(dmgPhotos.length   / 3) * (22 + CAPTION_H + 14) + 4 : 0) +
+    (hasPage2               ? 8 + 58 + 5 + 18 : 0)
+  );
+  const totalPages = !hasPage2 ? 1 : (estP2H > PH_SAFE ? 3 : 2);
 
   const doc = new jsPDF({ orientation: 'portrait', unit: 'mm', format: 'a4' });
   const generated = new Date().toLocaleString('en-ZA', {
@@ -336,275 +267,343 @@ export async function generateInspectionPDF(
     hour: '2-digit', minute: '2-digit',
   });
 
-  const col2  = M + CW / 2 + 2;
-  const ROW   = 5.8;
+  const col2 = M + CW / 2 + 3;
+  const colW = CW / 2 - 3;
 
-  // ═══════════════════════════════════════════════════════════════════════════
   // PAGE 1
-  // ═══════════════════════════════════════════════════════════════════════════
-  pageHeader(doc, 1, totalPages, 'Pre-Service Inspection Report');
+  pageHeader(doc, 1, totalPages);
   pageFooter(doc, job.id, generated);
-  let y = BODY_Y + 2;
+  let y = BODY_Y + 1;
 
-  // ── Job summary banner ─────────────────────────────────────────────────
-  // Tinted background strip
-  ff(doc, C.bgAlt); doc.rect(M - 2, y - 3, CW + 4, 28, 'F');
-  df(doc, C.border); doc.setLineWidth(0.3);
-  doc.rect(M - 2, y - 3, CW + 4, 28, 'S');
-  // Left accent bar (navy)
-  ff(doc, C.navy); doc.rect(M - 2, y - 3, 3, 28, 'F');
+  // Hero card
+  const heroH = 34;
+  ff(doc, C.bgDeep); rr(doc, M - 1 + 0.8, y - 1 + 0.8, CW + 2, heroH, 3, 'F');
+  ff(doc, C.bgCard); df(doc, C.border); doc.setLineWidth(0.25);
+  rr(doc, M - 1, y - 1, CW + 2, heroH, 3, 'FD');
+  ff(doc, C.navy); rr(doc, M - 1, y - 1, 5.5, heroH, 3, 'F');
+  doc.rect(M + 1.5, y - 1, 3, heroH, 'F');
 
-  // Status badge (top-right of banner)
-  const sl = STATUS_LABELS[job.status] ?? job.status.toUpperCase();
-  const sc = STATUS_COLORS[job.status] ?? C.muted;
-  const sb = STATUS_BG[job.status] ?? C.bgAlt;
-  doc.setFont('helvetica', 'bold'); doc.setFontSize(6.5);
-  const bw = doc.getTextWidth(sl) + 8;
-  ff(doc, sb); df(doc, sc); doc.setLineWidth(0.5);
-  doc.rect(PW - M - bw, y - 1, bw, 6, 'FD');
-  tf(doc, sc); doc.text(sl, PW - M - bw / 2, y + 3.5, { align: 'center' });
+  const sl   = STATUS_LABELS[job.status] ?? job.status.toUpperCase();
+  const sc   = STATUS_COLORS[job.status] ?? C.muted;
+  const sbg  = STATUS_BG[job.status] ?? C.bgAlt;
+  const sbdr = STATUS_BDR[job.status] ?? C.borderMid;
+  pillBadge(doc, sl, PW - M - 16, y + 4, sc, sbg, sbdr);
 
-  // Customer name (large)
-  doc.setFont('helvetica', 'bold'); doc.setFontSize(12); tf(doc, C.navy);
-  doc.text(job.customer_name, M + 4, y + 5);
+  doc.setFont('helvetica', 'bold'); doc.setFontSize(13); tf(doc, C.navy);
+  doc.text(job.customer_name, M + 7.5, y + 8.5);
 
-  // License plate pill
-  const lp = job.license_plate;
-  doc.setFont('helvetica', 'bold'); doc.setFontSize(8.5); tf(doc, C.white);
-  const lpw = doc.getTextWidth(lp) + 6;
-  ff(doc, C.navy); doc.rect(M + 4, y + 7.5, lpw, 6, 'F');
-  doc.text(lp, M + 4 + lpw / 2, y + 12, { align: 'center' });
+  const lp  = job.license_plate;
+  doc.setFont('helvetica', 'bold'); doc.setFontSize(9);
+  const lpw = doc.getTextWidth(lp) + 10;
+  ff(doc, C.goldBg); df(doc, C.goldBdr); doc.setLineWidth(0.9);
+  rr(doc, M + 7.5, y + 11, lpw, 7.5, 1.5, 'FD');
+  tf(doc, C.text);
+  doc.text(lp, M + 7.5 + lpw / 2, y + 17, { align: 'center' });
 
-  // Job ID + date
-  doc.setFont('helvetica', 'normal'); doc.setFontSize(6.5); tf(doc, C.muted);
-  doc.text(`${job.id}  ·  ${fmtDate(job.created_at)}`, M + lpw + 8, y + 11.5);
+  doc.setFont('helvetica', 'normal'); doc.setFontSize(6); tf(doc, C.mutedLt);
+  doc.text(job.id, M + lpw + 11, y + 16.5);
 
-  // Service line
   if (job.service_details) {
-    doc.setFont('helvetica', 'bold'); doc.setFontSize(8); tf(doc, C.red);
-    doc.text(job.service_details, M + 4, y + 21);
+    ff(doc, C.accent); doc.circle(M + 9, y + 24.5, 1.8, 'F');
+    doc.setFont('helvetica', 'bold'); doc.setFontSize(8); tf(doc, C.accent);
+    doc.text(job.service_details, M + 13, y + 25.5);
   }
-  y += 32;
 
-  // ── Vehicle Information ─────────────────────────────────────────────────
+  doc.setFont('helvetica', 'normal'); doc.setFontSize(5.8); tf(doc, C.mutedLt);
+  doc.text(`Date: ${fmtDate(job.created_at)}`, M + 7.5, y + 31);
+  if (mechanic) {
+    doc.text(`Inspector: ${mechanic.name}`, col2, y + 31);
+  }
+  y += heroH + 8;  // hero card shadow/border ends at y+33, need ≥5mm clearance before next section heading
+
+  // Vehicle info cards
   y = sectionHeading(doc, 'Vehicle Information', y);
+  const viH = 30;
 
-  // Alternating rows across 2 columns
-  const vPairs: Array<[string, string, string, string]> = [
-    ['Registration', job.license_plate,
-     'Type',         job.vehicle_type ? job.vehicle_type.charAt(0).toUpperCase() + job.vehicle_type.slice(1) : 'N/A'],
-    ['Make',         job.make  || 'N/A',
-     'Odometer',     job.odometer ? `${job.odometer.toLocaleString()} km` : 'N/A'],
-    ['Model',        job.model || 'N/A',
-     'Mechanic',     mechanic?.name  || 'Unassigned'],
-    ['Year',         job.year  ? String(job.year) : 'N/A',
-     'Contact',      mechanic?.email || 'N/A'],
+  // Left card
+  ff(doc, C.bgCard); df(doc, C.border); doc.setLineWidth(0.2);
+  rr(doc, M, y, colW, viH, 2, 'FD');
+  ff(doc, C.navyMid); rr(doc, M, y, colW, 7, 2, 'F');
+  doc.rect(M, y + 3.5, colW, 3.5, 'F');
+  ff(doc, C.white); doc.circle(M + 5, y + 3.5, 2.5, 'F');
+  doc.setFont('helvetica', 'bold'); doc.setFontSize(4.5); tf(doc, C.navyMid);
+  doc.text('CAR', M + 5, y + 4.7, { align: 'center' });
+  doc.setFont('helvetica', 'bold'); doc.setFontSize(6.5); tf(doc, C.white);
+  doc.text('VEHICLE DETAILS', M + 10, y + 5);
+
+  const leftPairs: [string, string][] = [
+    ['Registration', job.license_plate],
+    ['Make',         job.make  || 'N/A'],
+    ['Model',        job.model || 'N/A'],
+    ['Year',         job.year  ? String(job.year) : 'N/A'],
   ];
-  vPairs.forEach(([ll, lv, rl, rv], i) => {
-    const ry = y + i * ROW;
-    if (i % 2 === 0) { ff(doc, C.bgAlt); doc.rect(M - 2, ry - 4, CW + 4, ROW, 'F'); }
-    kv(doc, ll, lv, M,    ry);
-    kv(doc, rl, rv, col2, ry);
+  leftPairs.forEach(([label, value], i) => {
+    const ry = y + 10 + i * ROW;
+    if (i % 2 === 0) { ff(doc, C.bg); doc.rect(M + 1, ry - 3.5, colW - 2, ROW, 'F'); }
+    doc.setFont('helvetica', 'normal'); doc.setFontSize(5.8); tf(doc, C.muted);
+    doc.text(label, M + 3, ry);
+    doc.setFont('helvetica', 'bold'); doc.setFontSize(6.5); tf(doc, C.text);
+    let v = value;
+    while (doc.getTextWidth(v) > colW - 26 && v.length > 4) v = v.slice(0, -4) + '...';
+    doc.text(v, M + 23, ry);
   });
-  y += vPairs.length * ROW + 5;
 
-  // ── Intake Photos ────────────────────────────────────────────────────────
-  if (job.license_plate_photo || job.disk_photo) {
+  // Right card
+  ff(doc, C.bgCard); df(doc, C.border); doc.setLineWidth(0.2);
+  rr(doc, col2, y, colW, viH, 2, 'FD');
+  ff(doc, C.navyMid); rr(doc, col2, y, colW, 7, 2, 'F');
+  doc.rect(col2, y + 3.5, colW, 3.5, 'F');
+  ff(doc, C.white); doc.circle(col2 + 5, y + 3.5, 2.5, 'F');
+  doc.setFont('helvetica', 'bold'); doc.setFontSize(4.5); tf(doc, C.navyMid);
+  doc.text('SVC', col2 + 5, y + 4.7, { align: 'center' });
+  doc.setFont('helvetica', 'bold'); doc.setFontSize(6.5); tf(doc, C.white);
+  doc.text('SERVICE & INSPECTOR', col2 + 10, y + 5);
+
+  const rightPairs: [string, string][] = [
+    ['Type',     job.vehicle_type ? job.vehicle_type.charAt(0).toUpperCase() + job.vehicle_type.slice(1) : 'N/A'],
+    ['Odometer', job.odometer ? `${job.odometer.toLocaleString()} km` : 'N/A'],
+    ['Mechanic', mechanic?.name  || 'Unassigned'],
+    ['Contact',  mechanic?.email || 'N/A'],
+  ];
+  rightPairs.forEach(([label, value], i) => {
+    const ry = y + 10 + i * ROW;
+    if (i % 2 === 0) { ff(doc, C.bg); doc.rect(col2 + 1, ry - 3.5, colW - 2, ROW, 'F'); }
+    doc.setFont('helvetica', 'normal'); doc.setFontSize(5.8); tf(doc, C.muted);
+    doc.text(label, col2 + 3, ry);
+    doc.setFont('helvetica', 'bold'); doc.setFontSize(6.5); tf(doc, C.text);
+    let v = value;
+    while (doc.getTextWidth(v) > colW - 26 && v.length > 4) v = v.slice(0, -4) + '...';
+    doc.text(v, col2 + 23, ry);
+  });
+  y += viH + 8;  // cards end at y+30, +8 gives 3mm gap before section heading background
+
+  // Intake photos
+  const intakePhotos = [
+    { url: job.license_plate_photo, label: 'License Plate' },
+    { url: job.disk_photo,          label: 'License Disk'  },
+    { url: job.odometer_photo,      label: 'Odometer'      },
+  ].filter(p => !!p.url);
+
+  if (intakePhotos.length > 0) {
     y = sectionHeading(doc, 'Intake Photos', y);
-    const iw = (CW - 5) / 2;
-    const ih = 28;
-    imageBox(doc, job.license_plate_photo, 'License Plate', M,          y, iw, ih);
-    imageBox(doc, job.disk_photo,          'License Disk',  M + iw + 5, y, iw, ih);
-    y += ih + 10;
+    const gap = 4;
+    const iw  = (CW - gap * (intakePhotos.length - 1)) / intakePhotos.length;
+    const ih  = 28;
+    intakePhotos.forEach((p, i) => {
+      imageCard(doc, p.url, p.label, M + i * (iw + gap), y, iw, ih);
+    });
+    y += ih + CAPTION_H + 8;  // card draws ih+captionH=35mm; +8 gives 3mm gap before next section heading
   }
 
   if (!report) {
-    ff(doc, C.successBg); df(doc, [134, 239, 172] as RGB); doc.setLineWidth(0.25);
-    doc.rect(M, y, CW, 12, 'FD');
+    ff(doc, C.bgAlt); df(doc, C.border); doc.setLineWidth(0.25);
+    rr(doc, M, y, CW, 13, 2, 'FD');
     doc.setFont('helvetica', 'italic'); doc.setFontSize(8); tf(doc, C.muted);
-    doc.text('No inspection report submitted for this job yet.', PW / 2, y + 8, { align: 'center' });
+    doc.text('No inspection report submitted for this job yet.', PW / 2, y + 8.5, { align: 'center' });
     doc.save(`RT-Inspection-${job.id}.pdf`);
     return;
   }
 
-  // ── Inspection Findings: odometer + fuel ─────────────────────────────────
+  // Findings strip (odometer + fuel)
   y = sectionHeading(doc, 'Inspection Findings', y);
-  ff(doc, C.bgAlt); doc.rect(M - 2, y - 4, CW + 4, ROW, 'F');
+  const findH = 13;
+  ff(doc, C.bgCard); df(doc, C.border); doc.setLineWidth(0.2);
+  rr(doc, M, y, CW, findH, 2, 'FD');
+
+  ff(doc, C.navyMid); doc.circle(M + 6, y + findH / 2, 4, 'F');
+  ff(doc, C.navyLight); doc.circle(M + 6, y + findH / 2, 2.5, 'F');
+  ff(doc, C.white); doc.circle(M + 6, y + findH / 2, 1, 'F');
+  doc.setFont('helvetica', 'bold'); doc.setFontSize(8); tf(doc, C.text);
   const odo = report.odometer ?? job.odometer;
-  kv(doc, 'Odometer',   odo ? `${odo.toLocaleString()} km` : 'Not recorded', M,    y);
-  kv(doc, 'Fuel Level', report.fuel_level || 'N/A',                           col2, y);
-  y += ROW + 6;
+  doc.text(odo ? `${odo.toLocaleString()} km` : 'Not recorded', M + 12, y + findH / 2 + 2.8);
+  doc.setFont('helvetica', 'normal'); doc.setFontSize(6); tf(doc, C.muted);
+  doc.text('Odometer', M + 12, y + findH / 2 - 1.5);
 
-  // ── Tyre & Alloy Condition ────────────────────────────────────────────────
+  df(doc, C.border); doc.setLineWidth(0.3);
+  doc.line(col2 - 2, y + 2, col2 - 2, y + findH - 2);
+
+  const fuelPctMap: Record<string, number> = { 'Empty': 0, '1/4': 25, '1/2': 50, '3/4': 75, 'Full': 100 };
+  const fuelPct = report.fuel_level ? (fuelPctMap[report.fuel_level] ?? null) : null;
+  const fuelColor = fuelPct === null ? C.muted : fuelPct >= 50 ? C.success : fuelPct >= 25 ? C.warning : C.error;
+  ff(doc, fuelColor); doc.circle(col2 + 5, y + findH / 2, 4, 'F');
+  ff(doc, C.bgCard); doc.circle(col2 + 5, y + findH / 2, 2.5, 'F');
+  ff(doc, fuelColor); doc.circle(col2 + 5, y + findH / 2, 1, 'F');
+  doc.setFont('helvetica', 'bold'); doc.setFontSize(8); tf(doc, C.text);
+  doc.text(report.fuel_level || 'N/A', col2 + 11, y + findH / 2 + 2.8);
+  doc.setFont('helvetica', 'normal'); doc.setFontSize(6); tf(doc, C.muted);
+  doc.text('Fuel Level', col2 + 11, y + findH / 2 - 1.5);
+  y += findH + 8;  // strip ends at y+13, +8 gives 3mm gap
+
+  // Tyre tiles
   y = sectionHeading(doc, 'Tyre & Alloy Condition', y);
-  const tbw = (CW - 5) / 2;
-  const tbh = 14;
-  const positions = [
-    { x: M,           yt: y },
-    { x: M + tbw + 5, yt: y },
-    { x: M,           yt: y + tbh + 4 },
-    { x: M + tbw + 5, yt: y + tbh + 4 },
-  ];
+  const tcW = (CW - 9) / 4;
+  const tcH = 20;
+
   TYRE_POSITIONS.forEach(({ key, label }, i) => {
-    const val   = report.tire_conditions[key as keyof typeof report.tire_conditions];
-    const cond  = TYRE_CONDITIONS.find(c => c.value === val);
-    const col   = TYRE_COND_COLORS[val ?? ''] ?? C.muted;
-    const bgCol = TYRE_COND_BG[val ?? ''] ?? C.bgLight;
-    const pos   = positions[i];
+    const val  = report.tire_conditions[key as keyof typeof report.tire_conditions];
+    const cond = TYRE_CONDITIONS.find(c => c.value === val);
+    const col  = TYRE_COND_COLORS[val ?? ''] ?? C.muted;
+    const bg   = TYRE_COND_BG[val ?? ''] ?? C.bg;
+    const bdr  = TYRE_COND_BDR[val ?? ''] ?? C.border;
+    const tx   = M + i * (tcW + 3);
 
-    // Card bg
-    ff(doc, bgCol); df(doc, col); doc.setLineWidth(0.5);
-    doc.rect(pos.x, pos.yt, tbw, tbh, 'FD');
-    // Left colour bar
-    ff(doc, col); doc.rect(pos.x, pos.yt, 3.5, tbh, 'F');
-    // Position label
-    doc.setFont('helvetica', 'normal'); doc.setFontSize(6.5); tf(doc, C.muted);
-    doc.text(label, pos.x + 6, pos.yt + 5.5);
-    // Condition value
-    doc.setFont('helvetica', 'bold'); doc.setFontSize(9); tf(doc, col);
-    doc.text(cond?.label ?? 'Not recorded', pos.x + 6, pos.yt + 11.5);
+    ff(doc, C.bgDeep); rr(doc, tx + 0.5, y + 0.5, tcW, tcH, 2, 'F');
+    ff(doc, bg); df(doc, bdr); doc.setLineWidth(0.5);
+    rr(doc, tx, y, tcW, tcH, 2, 'FD');
+    ff(doc, col); rr(doc, tx, y, tcW, 4, 2, 'F');
+    doc.rect(tx, y + 2, tcW, 2, 'F');
+
+    const cx = tx + tcW / 2, cy = y + 11;
+    ff(doc, col); doc.circle(cx, cy, 3.8, 'F');
+    ff(doc, bg); doc.circle(cx, cy, 2.6, 'F');
+    ff(doc, col); doc.circle(cx, cy, 1.2, 'F');
+    ff(doc, bg); doc.circle(cx, cy, 0.5, 'F');
+
+    doc.setFont('helvetica', 'bold'); doc.setFontSize(5.2); tf(doc, C.muted);
+    doc.text(label, cx, y + 16.5, { align: 'center' });
+    doc.setFont('helvetica', 'bold'); doc.setFontSize(6); tf(doc, col);
+    const condLabel = cond?.label ?? 'Not set';
+    let cl = condLabel;
+    while (doc.getTextWidth(cl) > tcW - 3 && cl.length > 4) cl = cl.slice(0, -4) + '...';
+    doc.text(cl, cx, y + tcH - 1, { align: 'center' });
   });
-  y += (tbh + 4) * 2 + 5;
+  y += tcH + 10;  // condition label sits at y+19 (tcH-1); +10 gives a clean 4mm gap to next section heading
 
-  // ── Damage Table ──────────────────────────────────────────────────────────
-  const dmgTitle = report.damages.length === 0
+  // Damage table
+  const dmgCount = report.damages.length;
+  const dmgTitle = dmgCount === 0
     ? 'Damage Inspection'
-    : `Damage Inspection  (${report.damages.length} item${report.damages.length !== 1 ? 's' : ''})`;
+    : `Damage Inspection  -  ${dmgCount} Item${dmgCount !== 1 ? 's' : ''}`;
   y = sectionHeading(doc, dmgTitle, y);
 
-  if (report.damages.length === 0) {
-    ff(doc, C.successBg); df(doc, [134, 239, 172] as RGB); doc.setLineWidth(0.25);
-    doc.rect(M, y, CW, 11, 'FD');
+  if (dmgCount === 0) {
+    ff(doc, C.successBg); df(doc, C.successBdr); doc.setLineWidth(0.3);
+    rr(doc, M, y, CW, 12, 2, 'FD');
+    ff(doc, C.success); doc.circle(M + 7, y + 6, 4, 'F');
+    doc.setFont('helvetica', 'bold'); doc.setFontSize(9); tf(doc, C.white);
+    doc.text('[OK]', M + 7, y + 8, { align: 'center' });
     doc.setFont('helvetica', 'bold'); doc.setFontSize(7.5); tf(doc, C.success);
-    doc.text('✓  No damage recorded during this inspection', PW / 2, y + 7.5, { align: 'center' });
-    y += 16;
+    doc.text('No damage recorded during this inspection', M + 14, y + 7.5);
+    y += 18;
   } else {
-    const tcols = [
-      { label: '#',     x: M + 2,   w: 8  },
-      { label: 'Part',  x: M + 10,  w: 48 },
-      { label: 'Type',  x: M + 58,  w: 28 },
-      { label: 'Sev.',  x: M + 90,  w: 22 },
-      { label: 'View',  x: M + 114, w: 22 },
-      { label: 'Photo', x: M + 138, w: 16 },
+    const tHdr = 7.5;
+    const tRow = 6.5;
+    const cols = [
+      { label: '#',     x: M + 2    },
+      { label: 'Part',  x: M + 10   },
+      { label: 'Type',  x: M + 64   },
+      { label: 'Sev.',  x: M + 94   },
+      { label: 'View',  x: M + 120  },
+      { label: 'Photo', x: M + 151  },
     ];
-    // Header row
-    ff(doc, C.navyLight); doc.rect(M, y, CW, 6.5, 'F');
+
+    ff(doc, C.navy); rr(doc, M, y, CW, tHdr, 2, 'F');
+    doc.rect(M, y + 2, CW, tHdr - 2, 'F');
     doc.setFont('helvetica', 'bold'); doc.setFontSize(6.5); tf(doc, C.white);
-    tcols.forEach(c => doc.text(c.label, c.x, y + 4.5));
-    y += 6.5;
+    cols.forEach(c => doc.text(c.label, c.x, y + tHdr - 1.5));
+    y += tHdr;
 
     report.damages.forEach((d, i) => {
-      const ry = y + i * ROW;
-      // Alternating row
-      if (i % 2 === 0) { ff(doc, C.bgAlt); doc.rect(M, ry, CW, ROW, 'F'); }
-      // Number
-      doc.setFont('helvetica', 'bold'); doc.setFontSize(6.5); tf(doc, C.navyLight);
-      doc.text(String(i + 1), tcols[0].x, ry + 4);
-      // Part
-      doc.setFont('helvetica', 'normal'); tf(doc, C.text);
-      doc.text(d.part,        tcols[1].x, ry + 4);
-      // Type — capitalise
-      doc.text(d.damage_type.charAt(0).toUpperCase() + d.damage_type.slice(1), tcols[2].x, ry + 4);
-      // Severity — coloured bold
-      doc.setFont('helvetica', 'bold');
-      tf(doc, d.severity === 'major' ? C.error : C.warning);
-      doc.text(d.severity === 'major' ? 'Major' : 'Minor', tcols[3].x, ry + 4);
-      // View
-      doc.setFont('helvetica', 'normal'); tf(doc, C.muted);
-      doc.text(d.view ? (VIEW_LABELS[d.view] ?? d.view) : '—', tcols[4].x, ry + 4);
-      // Photo checkmark
-      tf(doc, d.photo_url ? C.success : C.mutedLt);
-      doc.text(d.photo_url ? '✓' : '—', tcols[5].x, ry + 4);
+      const ry = y + i * tRow;
+      if (i % 2 === 0) { ff(doc, C.bg); doc.rect(M, ry, CW, tRow, 'F'); }
+
+      const sevColor = d.severity === 'major' ? C.error : C.warning;
+      ff(doc, sevColor); doc.circle(cols[0].x + 1.5, ry + tRow / 2, 2.2, 'F');
+      doc.setFont('helvetica', 'bold'); doc.setFontSize(5.5); tf(doc, C.white);
+      doc.text(String(i + 1), cols[0].x + 1.5, ry + tRow / 2 + 1.7, { align: 'center' });
+
+      doc.setFont('helvetica', 'bold'); doc.setFontSize(6.8); tf(doc, C.text);
+      doc.text(d.part, cols[1].x, ry + 4.5);
+
+      doc.setFont('helvetica', 'normal'); doc.setFontSize(6.5); tf(doc, C.textMid);
+      const typeCap = d.damage_type.charAt(0).toUpperCase() + d.damage_type.slice(1);
+      doc.text(typeCap, cols[2].x, ry + 4.5);
+
+      const sevTxt = d.severity === 'major' ? 'Major' : 'Minor';
+      doc.setFont('helvetica', 'bold'); doc.setFontSize(5.8);
+      const sevW = doc.getTextWidth(sevTxt) + 6;
+      ff(doc, d.severity === 'major' ? C.errorBg : C.warningBg);
+      df(doc, sevColor); doc.setLineWidth(0.3);
+      rr(doc, cols[3].x, ry + 1.2, sevW, 4.5, 2, 'FD');
+      tf(doc, sevColor);
+      doc.text(sevTxt, cols[3].x + sevW / 2, ry + 4.5, { align: 'center' });
+
+      doc.setFont('helvetica', 'normal'); doc.setFontSize(6); tf(doc, C.muted);
+      doc.text(d.view ? (VIEW_LABELS[d.view] ?? d.view) : '-', cols[4].x, ry + 4.5);
+
+      if (d.photo_url) {
+        ff(doc, C.successBg); df(doc, C.successBdr); doc.setLineWidth(0.25);
+        rr(doc, cols[5].x, ry + 1.2, 9, 4.5, 2, 'FD');
+        doc.setFont('helvetica', 'bold'); doc.setFontSize(6.5); tf(doc, C.success);
+        doc.text('[Y]', cols[5].x + 4.5, ry + 4.5, { align: 'center' });
+      } else {
+        doc.setFont('helvetica', 'normal'); doc.setFontSize(6); tf(doc, C.mutedLt);
+        doc.text('-', cols[5].x, ry + 4.5);
+      }
     });
 
-    // Table border
     df(doc, C.border); doc.setLineWidth(0.25);
-    doc.rect(M, y - 6.5, CW, 6.5 + report.damages.length * ROW, 'S');
-    y += report.damages.length * ROW + 4;
+    doc.rect(M, y - tHdr, CW, tHdr + dmgCount * tRow, 'S');
+    y += dmgCount * tRow + 7;
   }
 
-  // ═══════════════════════════════════════════════════════════════════════════
   // PAGE 2
-  // ═══════════════════════════════════════════════════════════════════════════
   if (!hasPage2) { doc.save(`RT-Inspection-${job.id}.pdf`); return; }
 
   doc.addPage();
-  pageHeader(doc, 2, totalPages, 'Pre-Service Inspection Report');
+  pageHeader(doc, 2, totalPages);
   pageFooter(doc, job.id, generated);
-  y = BODY_Y + 2;
+  y = BODY_Y + 1;
 
-  // ── Vehicle Angle Photos ─────────────────────────────────────────────────
+  // Vehicle angle photos
   if (angleEntries.length > 0) {
-    y = sectionHeading(doc, 'Vehicle Photos — Captured by Inspector', y);
+    y = sectionHeading(doc, 'Vehicle Photos - Captured by Inspector', y);
     const aw = (CW - 5) / 2;
-    const ah = 22;
-    let col = 0;
+    const ah = 32;
+    let photoCol = 0;
     for (const [key, url] of angleEntries) {
-      imageBox(doc, url, VIEW_LABELS[key] ?? key, M + col * (aw + 5), y, aw, ah);
-      col++;
-      if (col >= 2) { col = 0; y += ah + 10; }
+      imageCard(doc, url, VIEW_LABELS[key] ?? key, M + photoCol * (aw + 5), y, aw, ah);
+      photoCol++;
+      if (photoCol >= 2) { photoCol = 0; y += ah + CAPTION_H + 7; }  // card height = ah+captionH; +7 gap
     }
-    if (col > 0) y += ah + 10;
-    y += 2;
-  }
-
-  // ── Damage Map ───────────────────────────────────────────────────────────
-  if (diagramCanvases.size > 0) {
-    y = sectionHeading(doc, 'Damage Map — Marked on Vehicle', y);
-
-    // Legend + note on same line
-    let lx = M;
-    [{ label: 'Scratch', hex: DMG_PIN_COLORS.scratch },
-     { label: 'Dent',    hex: DMG_PIN_COLORS.dent    },
-     { label: 'Crack',   hex: DMG_PIN_COLORS.crack   }].forEach(({ label, hex }) => {
-      const rgb = parseInt(hex.slice(1), 16);
-      ff(doc, [(rgb >> 16) & 0xff, (rgb >> 8) & 0xff, rgb & 0xff] as RGB);
-      doc.circle(lx + 2.2, y - 1.5, 2.2, 'F');
-      doc.setFont('helvetica', 'normal'); doc.setFontSize(6.5); tf(doc, C.muted);
-      doc.text(label, lx + 5.5, y - 0.2);
-      lx += 5.5 + doc.getTextWidth(label) + 5;
-    });
+    if (photoCol > 0) y += ah + CAPTION_H + 7;
     y += 4;
-
-    const dmw = (CW - 5) / 2;
-    const dmh = 22;
-    let dmCol = 0;
-    for (const [view, dataUrl] of diagramCanvases) {
-      imageBox(doc, dataUrl, VIEW_LABELS[view] ?? view, M + dmCol * (dmw + 5), y, dmw, dmh);
-      dmCol++;
-      if (dmCol >= 2) { dmCol = 0; y += dmh + 10; }
-    }
-    if (dmCol > 0) y += dmh + 10;
-    y += 2;
   }
 
-  // ── Damage Photos ────────────────────────────────────────────────────────
+  // Damage photos
   if (dmgPhotos.length > 0) {
     y = sectionHeading(doc, 'Damage Photos', y);
     const dw = (CW - 10) / 3;
-    const dh = 18;
-    let col = 0;
+    const dh = 22;
+    let dmgCol = 0;
     for (const d of dmgPhotos) {
-      const lb = `${d.part} — ${d.severity === 'major' ? 'Major' : 'Minor'}`;
-      imageBox(doc, d.photo_url, lb, M + col * (dw + 5), y, dw, dh);
-      col++;
-      if (col >= 3) { col = 0; y += dh + 10; }
+      const lb = `${d.part} - ${d.severity === 'major' ? 'Major' : 'Minor'}`;
+      imageCard(doc, d.photo_url, lb, M + dmgCol * (dw + 5), y, dw, dh);
+      dmgCol++;
+      if (dmgCol >= 3) { dmgCol = 0; y += dh + CAPTION_H + 7; }  // card height = dh+captionH; +7 gap
     }
-    if (col > 0) y += dh + 10;
+    if (dmgCol > 0) y += dh + CAPTION_H + 7;
     const totalDmg = report.damages.filter(d => !!d.photo_url).length;
     if (totalDmg > 6) {
-      doc.setFont('helvetica', 'italic'); doc.setFontSize(6.5); tf(doc, C.muted);
-      doc.text(`(${totalDmg - 6} additional damage photo${totalDmg - 6 > 1 ? 's' : ''} available in the system)`, M, y);
-      y += 5;
+      doc.setFont('helvetica', 'italic'); doc.setFontSize(6); tf(doc, C.muted);
+      doc.text(`+ ${totalDmg - 6} more damage photo${totalDmg - 6 > 1 ? 's' : ''} available in the system`, M, y);
+      y += 8;
     }
-    y += 2;
+    y += 4;
   }
 
-  // ── Signatures ────────────────────────────────────────────────────────────
+  // Signatures — start a new page if not enough room (heading + two sig cards + disclaimer)
+  const sigImgH  = 26;
+  const sigCardH = sigImgH + 30;  // header bar(9) + avatar row(13) + signed row(8) + sig image(sigImgH)
+  const sigBlockNeeded = 8 + sigCardH + 5 + 18;  // section heading + cards + gap + disclaimer
+  if (y + sigBlockNeeded > PH - 12) {
+    doc.addPage();
+    pageHeader(doc, 3, totalPages);
+    pageFooter(doc, job.id, generated);
+    y = BODY_Y + 1;
+  }
   y = sectionHeading(doc, 'Signatures', y);
-  const sw    = (CW - 5) / 2;
-  const sigH  = 28;
-  const sBoxH = sigH + 22;
+  const sw = (CW - 5) / 2;
 
   const drawSigBox = (
     bx: number, by: number,
@@ -613,29 +612,47 @@ export async function generateInspectionPDF(
     signedAt: string | undefined,
     sigUrl: string | undefined,
   ) => {
-    // Card
-    ff(doc, C.bgLight); df(doc, C.border); doc.setLineWidth(0.3);
-    doc.rect(bx, by, sw, sBoxH, 'FD');
-    // Header bar
-    ff(doc, C.navyLight); doc.rect(bx, by, sw, 8, 'F');
+    ff(doc, C.bgDeep); rr(doc, bx + 0.7, by + 0.7, sw, sigCardH, 3, 'F');
+    ff(doc, C.bgCard); df(doc, C.border); doc.setLineWidth(0.25);
+    rr(doc, bx, by, sw, sigCardH, 3, 'FD');
+    ff(doc, C.navy); rr(doc, bx, by, sw, 9, 3, 'F');
+    doc.rect(bx, by + 4, sw, 5, 'F');
     doc.setFont('helvetica', 'bold'); doc.setFontSize(6.5); tf(doc, C.white);
-    doc.text(title, bx + sw / 2, by + 5.5, { align: 'center' });
-    // Name
-    let sy = by + 13;
+    doc.text(title, bx + sw / 2, by + 6.5, { align: 'center' });
+
+    let sy = by + 14;
+    const initials = (name ?? '?').split(' ').map((w: string) => w[0]).join('').slice(0, 2).toUpperCase();
+    ff(doc, C.navyLight); doc.circle(bx + 7, sy - 1, 4.5, 'F');
+    ff(doc, C.bgAlt); doc.circle(bx + 7, sy - 1, 3.2, 'F');
+    doc.setFont('helvetica', 'bold'); doc.setFontSize(6); tf(doc, C.navyLight);
+    doc.text(initials, bx + 7, sy + 1, { align: 'center' });
+
     if (name) {
-      doc.setFont('helvetica', 'bold'); doc.setFontSize(8); tf(doc, C.text);
-      doc.text(name, bx + 4, sy); sy += 5;
+      doc.setFont('helvetica', 'bold'); doc.setFontSize(8.5); tf(doc, C.text);
+      doc.text(name, bx + 14, sy + 0.5);
     }
-    // Signed date
+    sy += 7;
+
     if (signedAt) {
-      doc.setFont('helvetica', 'normal'); doc.setFontSize(6); tf(doc, C.muted);
-      doc.text(`Signed: ${fmtSigned(signedAt)}`, bx + 4, sy); sy += 4;
+      ff(doc, C.bgAlt); df(doc, C.border); doc.setLineWidth(0.15);
+      rr(doc, bx + 3, sy - 3, sw - 6, 6, 1.5, 'FD');
+      ff(doc, C.navyLight); doc.circle(bx + 6.5, sy, 2, 'F');
+      doc.setFont('helvetica', 'bold'); doc.setFontSize(4.5); tf(doc, C.white);
+      doc.text('T', bx + 6.5, sy + 1.3, { align: 'center' });
+      doc.setFont('helvetica', 'normal'); doc.setFontSize(5.8); tf(doc, C.muted);
+      doc.text('Signed:', bx + 10, sy + 1);
+      doc.setFont('helvetica', 'bold'); tf(doc, C.text);
+      doc.text(fmtSigned(signedAt), bx + 21, sy + 1);
+      sy += 7;
+    } else {
+      sy += 2;
     }
-    // Signature image area (light tinted)
-    ff(doc, C.bgAlt); doc.rect(bx + 3, sy, sw - 6, sigH - 4, 'F');
-    if (!placeImage(doc, sigUrl, bx + 3, sy, sw - 6, sigH - 4)) {
+
+    ff(doc, C.bg); df(doc, C.borderMid); doc.setLineWidth(0.2);
+    rr(doc, bx + 3, sy, sw - 6, sigImgH, 2, 'FD');
+    if (!placeImage(doc, sigUrl, bx + 3, sy, sw - 6, sigImgH)) {
       doc.setFont('helvetica', 'italic'); doc.setFontSize(6); tf(doc, C.mutedLt);
-      doc.text('No signature captured', bx + sw / 2, sy + (sigH - 4) / 2, { align: 'center' });
+      doc.text('No signature captured', bx + sw / 2, sy + sigImgH / 2, { align: 'center' });
     }
   };
 
@@ -653,14 +670,18 @@ export async function generateInspectionPDF(
     report.customer_signed_at,
     report.customer_signature_url ?? report.signature_url,
   );
-  y += sBoxH + 4;
+  y += sigCardH + 5;
 
-  // ── Disclaimer ────────────────────────────────────────────────────────────
-  ff(doc, C.bgAlt); doc.rect(0, y, PW, 8, 'F');
-  df(doc, C.border); doc.setLineWidth(0.3); doc.line(0, y, PW, y);
-  doc.setFont('helvetica', 'italic'); doc.setFontSize(6); tf(doc, C.muted);
-  doc.text('Official pre-service inspection record — Royal Tyres Inspection System', PW / 2, y + 3.2, { align: 'center' });
-  doc.text(`Generated: ${generated}`, PW / 2, y + 6.2, { align: 'center' });
+  // Disclaimer bar
+  ff(doc, C.bgAlt); df(doc, C.border); doc.setLineWidth(0.2);
+  rr(doc, M, y, CW, 9, 2, 'FD');
+  ff(doc, C.accent); rr(doc, M, y, 3, 9, 2, 'F');
+  doc.rect(M + 1, y, 2, 9, 'F');
+  doc.setFont('helvetica', 'italic'); doc.setFontSize(5.8); tf(doc, C.muted);
+  doc.text(
+    'This is an official pre-service inspection record. Any alteration invalidates this document. Royal Tyres Inspection System.',
+    M + 6, y + 5.5,
+  );
 
   doc.save(`RT-Inspection-${job.id}.pdf`);
 }

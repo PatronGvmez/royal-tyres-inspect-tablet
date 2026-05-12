@@ -4,7 +4,7 @@ import { useQueryClient, useQuery } from '@tanstack/react-query';
 import SignatureCanvas from 'react-signature-canvas';
 import { mockJobCards } from '@/data/mock';
 import { VehicleDamage, InspectionReport } from '@/types';
-import { ArrowLeft, Check, Trash2, Box, Loader2, Sun, Moon, AlertCircle, Clock, Gauge } from 'lucide-react';
+import { ArrowLeft, Check, Trash2, Box, Loader2, Sun, Moon, AlertCircle, AlertTriangle, Clock, Gauge, Pencil } from 'lucide-react';
 import { useTheme } from '@/hooks/use-theme';
 import { useAuth } from '@/context/AuthContext';
 import CarDiagram, { TyreOverlay } from '@/components/inspection/CarDiagram';
@@ -42,7 +42,7 @@ const InspectionView = () => {
   const { data: firestorePhotos = {} } = useQuery({
     queryKey: ['job_photos', id],
     queryFn: () => fetchJobPhotos(id!),
-    staleTime: Infinity,
+    staleTime: 30_000, // 30 s — short enough to pick up freshly uploaded photos
     enabled: !!id,
   });
   const mechanicSigCanvas = useRef<SignatureCanvas>(null);
@@ -81,6 +81,13 @@ const InspectionView = () => {
   const autoSaveTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   // Track whether draft has been restored — prevents double-apply on StrictMode double-invoke
   const draftRestoredRef = useRef(false);
+  // Disable auto-save for the session if the Firestore write stream gets exhausted.
+  // Recovery requires a page reload; the Submit button still works after reload.
+  const writeStreamHealthyRef = useRef(true);
+  // Set during draft restore so the next auto-save effect run is skipped (data already in Firestore).
+  const suppressAutoSaveRef = useRef(false);
+  // Shown to the mechanic when write stream gets exhausted so they know to submit manually.
+  const [autoSaveDisabled, setAutoSaveDisabled] = useState(false);
 
   // Load persisted draft for this job (survives navigation / page refresh)
   const { data: existingDraft } = useQuery<InspectionDraft | null>({
@@ -112,6 +119,7 @@ const InspectionView = () => {
     const anyTireFilled = Object.values(tires).some(v => v !== '');
     if (anyTireFilled) return; // mechanic already started entering data — don't overwrite
     draftRestoredRef.current = true;
+    suppressAutoSaveRef.current = true; // skip the auto-save that fires on these state updates — data is already in Firestore
     if (existingDraft.tires) setTires(existingDraft.tires);
     if (existingDraft.damages?.length) setDamages(existingDraft.damages);
     if (existingDraft.tyreAdjustments && Object.keys(existingDraft.tyreAdjustments).length) {
@@ -122,22 +130,46 @@ const InspectionView = () => {
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [existingDraft]);
 
-  // Debounced auto-save — writes draft 2 s after last change to avoid excess Firestore writes
+  // Debounced auto-save — 8 s after last change to prevent flooding the Firestore write queue
   useEffect(() => {
     if (!id) return;
+    // Skip if the write stream is known-exhausted — avoids piling up more writes into a broken queue
+    if (!writeStreamHealthyRef.current) return;
+    // Skip the first render triggered by draft restore — that data is already persisted in Firestore
+    if (suppressAutoSaveRef.current) { suppressAutoSaveRef.current = false; return; }
     // Don't auto-save if nothing has been entered yet
     const hasData = Object.values(tires).some(v => v !== '') || damages.length > 0 || customerName.trim() !== '';
     if (!hasData) return;
     if (autoSaveTimerRef.current) clearTimeout(autoSaveTimerRef.current);
     autoSaveTimerRef.current = setTimeout(() => {
+      // Reconstruct damages as plain objects to prevent Firestore from rejecting undefined/class values
+      const draftDamages = damages.map(d => {
+        const item: VehicleDamage = {
+          part: d.part,
+          damage_type: d.damage_type,
+          severity: d.severity,
+          coordinates: { x: d.coordinates?.x ?? 0, y: d.coordinates?.y ?? 0 },
+        };
+        if (d.view) item.view = d.view;
+        if (typeof d.photo_url === 'string' && d.photo_url.length > 0) item.photo_url = d.photo_url;
+        return item;
+      });
       saveInspectionDraft(id, {
         job_card_id: id,
         tires,
-        damages,
+        damages: draftDamages,
         tyreAdjustments,
         customerName,
-      }).catch(() => {}); // non-blocking
-    }, 2000);
+      }).catch((err: unknown) => {
+        const code = (err as { code?: string })?.code;
+        if (code === 'resource-exhausted') {
+          // Write stream is exhausted — disable auto-save for this session.
+          // User must reload the page to recover; final Submit will work after reload.
+          writeStreamHealthyRef.current = false;
+          setAutoSaveDisabled(true);
+        }
+      });
+    }, 8000);
     return () => {
       if (autoSaveTimerRef.current) clearTimeout(autoSaveTimerRef.current);
     };
@@ -237,6 +269,22 @@ const InspectionView = () => {
     setDamages(prev => prev.filter((_, i) => i !== idx));
   };
 
+  // Helper: Recursively remove undefined values for Firestore compatibility
+  const cleanUndefined = (obj: Record<string, any>): Record<string, any> => {
+    return Object.fromEntries(
+      Object.entries(obj)
+        .filter(([_, v]) => v !== undefined)
+        .map(([k, v]) => [
+          k,
+          Array.isArray(v)
+            ? v.map(item => (item && typeof item === 'object' ? cleanUndefined(item) : item))
+            : v && typeof v === 'object' && !Array.isArray(v)
+              ? cleanUndefined(v)
+              : v,
+        ])
+    );
+  };
+
   const handleSubmit = async () => {
     if (isSubmitting) return;
 
@@ -252,29 +300,80 @@ const InspectionView = () => {
     }
     setTyreErrors({});
 
+    // Validate customer name is present when signature has been provided
+    if (customerSigCanvas.current && !customerSigCanvas.current.isEmpty() && !customerName.trim()) {
+      toast.error('Please enter the customer name before signing.');
+      setIsSubmitting(false);
+      return;
+    }
+
+    // Validate mechanic name is present
+    if (!user?.name) {
+      toast.error('Your profile is missing a name. Please update your profile first.');
+      setIsSubmitting(false);
+      return;
+    }
+
     setIsSubmitting(true);
     const now = new Date().toISOString();
-    const mechanicSig = mechanicSigCanvas.current?.isEmpty() ? undefined : mechanicSigCanvas.current?.toDataURL();
-    const customerSig = customerSigCanvas.current?.isEmpty() ? undefined : customerSigCanvas.current?.toDataURL();
+    // Composite onto a white canvas before JPEG encoding.
+    // JPEG does not support transparency — without this the transparent SignatureCanvas
+    // background becomes solid black, making the strokes invisible on the report.
+    const toWhiteJpeg = (srcCanvas: HTMLCanvasElement): string => {
+      const c = document.createElement('canvas');
+      c.width = srcCanvas.width;
+      c.height = srcCanvas.height;
+      const ctx = c.getContext('2d')!;
+      ctx.fillStyle = '#ffffff';
+      ctx.fillRect(0, 0, c.width, c.height);
+      ctx.drawImage(srcCanvas, 0, 0);
+      return c.toDataURL('image/jpeg', 0.7);
+    };
+    const mechanicSig = mechanicSigCanvas.current?.isEmpty()
+      ? undefined
+      : toWhiteJpeg(mechanicSigCanvas.current.getCanvas());
+    const customerSig = customerSigCanvas.current?.isEmpty()
+      ? undefined
+      : toWhiteJpeg(customerSigCanvas.current.getCanvas());
+
+    // Explicitly reconstruct each damage as a plain primitive object.
+    // This prevents Firestore rejecting class instances (e.g. Timestamps, StorageRef)
+    // or undefined values that may have been stored in the damages array.
+    const safeDamages: VehicleDamage[] = damages.map(d => {
+      const item: VehicleDamage = {
+        part: d.part,
+        damage_type: d.damage_type,
+        severity: d.severity,
+        coordinates: {
+          x: typeof d.coordinates?.x === 'number' ? d.coordinates.x : 0,
+          y: typeof d.coordinates?.y === 'number' ? d.coordinates.y : 0,
+        },
+      };
+      if (d.view) item.view = d.view;
+      // Only include photo_url when it is a non-empty string (skip undefined / null / File objects)
+      if (typeof d.photo_url === 'string' && d.photo_url.length > 0) item.photo_url = d.photo_url;
+      return item;
+    });
+
     const report: InspectionReport = {
       id: `IR-${Date.now()}`,
       job_card_id: id!,
       inspection_type: 'pre_service',
       tire_conditions: tires,
-      damages,
+      damages: safeDamages,
       tyreAdjustments: Object.keys(tyreAdjustments).length > 0 ? tyreAdjustments : undefined,
-      mechanic_name: user?.name,
+      mechanic_name: user.name,
       mechanic_signature_url: mechanicSig,
       mechanic_signed_at: mechanicSig ? (mechanicSignedAt ?? now) : undefined,
       customer_name: customerName || undefined,
       customer_signature_url: customerSig,
       customer_signed_at: customerSig ? (customerSignedAt ?? now) : undefined,
-      // legacy field — keep for backward compat with existing reports
-      signature_url: customerSig,
     };
 
     try {
-      await saveInspectionReport(report);
+      // Strip undefined values before saving to Firestore
+      const cleanReport = cleanUndefined(report) as InspectionReport;
+      await saveInspectionReport(cleanReport);
       await updateJobCardStatus(id!, 'completed');
       // Clean up the draft — job is now fully submitted
       deleteInspectionDraft(id!).catch(() => {});
@@ -314,7 +413,7 @@ const InspectionView = () => {
     <div className="min-h-screen bg-background pb-10">
       {/* ── Sticky Header ── */}
       <header className="sticky top-0 z-30 bg-card border-b border-border">
-        <div className="max-w-6xl mx-auto px-4 sm:px-6 py-3 flex items-center gap-3">
+        <div className="max-w-[1600px] mx-auto px-4 sm:px-6 py-3 flex items-center gap-3">
           <button
             onClick={() => navigate('/mechanic')}
             className="p-2 -ml-2 rounded-lg text-muted-foreground hover:bg-muted transition-colors"
@@ -336,7 +435,17 @@ const InspectionView = () => {
         </div>
       </header>
 
-      <div className="max-w-6xl mx-auto px-4 sm:px-6 space-y-5 mt-5">
+      <div className="max-w-[1600px] mx-auto px-4 sm:px-6 space-y-5 mt-5">
+
+        {/* ── Auto-save disabled banner ── */}
+        {autoSaveDisabled && (
+          <div className="flex items-start gap-3 px-4 py-3 rounded-xl border border-amber-300 bg-amber-50 dark:border-amber-600/40 dark:bg-amber-950/30">
+            <AlertTriangle className="w-4 h-4 text-amber-600 dark:text-amber-400 flex-shrink-0 mt-0.5" />
+            <p className="text-xs font-medium text-amber-800 dark:text-amber-300 leading-snug">
+              Auto-save paused — Firestore write limit reached. Your work is safe in this session. Complete the form and tap <strong>Submit Inspection</strong> when done.
+            </p>
+          </div>
+        )}
 
         {/* ── Job Context Card ── */}
         <div className="card-elevated overflow-hidden">
@@ -586,12 +695,22 @@ const InspectionView = () => {
                               {d.damage_type} · {d.severity} · {d.view || 'top'} view
                             </span>
                           </div>
-                          <button
-                            onClick={() => handleRemoveDamage(i)}
-                            className="ml-3 flex-shrink-0 p-1.5 rounded-lg text-destructive hover:bg-destructive/10 transition-colors"
-                          >
-                            <Trash2 className="w-3.5 h-3.5" />
-                          </button>
+                          <div className="flex items-center gap-1 ml-3 flex-shrink-0">
+                            <button
+                              onClick={() => handleEditDamage(i)}
+                              className="p-1.5 rounded-lg text-muted-foreground hover:text-primary hover:bg-primary/10 transition-colors"
+                              title="Edit damage"
+                            >
+                              <Pencil className="w-3.5 h-3.5" />
+                            </button>
+                            <button
+                              onClick={() => handleRemoveDamage(i)}
+                              className="p-1.5 rounded-lg text-destructive hover:bg-destructive/10 transition-colors"
+                              title="Remove damage"
+                            >
+                              <Trash2 className="w-3.5 h-3.5" />
+                            </button>
+                          </div>
                         </div>
                       ))}
                     </div>
@@ -679,20 +798,45 @@ const InspectionView = () => {
               <input
                 type="text"
                 value={customerName}
-                onChange={e => setCustomerName(e.target.value)}
+                onChange={e => {
+                  const val = e.target.value;
+                  setCustomerName(val);
+                  // Clear the signature if name is erased — a nameless sig is meaningless
+                  if (!val.trim()) {
+                    customerSigCanvas.current?.clear();
+                    setCustomerSignedAt(null);
+                    setShowCustomerTime(false);
+                  }
+                }}
                 placeholder="Enter customer full name"
                 className={inputCls}
               />
             </div>
           </div>
-          <div className="mx-4 sm:mx-5 mb-1 border border-border rounded-xl overflow-hidden bg-muted/30" style={{ touchAction: 'none' }}>
+          <div className="relative mx-4 sm:mx-5 mb-1 border border-border rounded-xl overflow-hidden bg-muted/30" style={{ touchAction: 'none' }}>
             <SignatureCanvas
               ref={customerSigCanvas}
               canvasProps={{ className: 'w-full', style: { width: '100%', height: 160 } }}
               penColor="hsl(220, 25%, 10%)"
               backgroundColor="transparent"
-              onEnd={() => setCustomerSignedAt(prev => prev ?? new Date().toISOString())}
+              onEnd={() => {
+                // Guard: only stamp timestamp when name is filled
+                if (!customerName.trim()) {
+                  customerSigCanvas.current?.clear();
+                  toast.error('Enter customer name above before signing.');
+                  return;
+                }
+                setCustomerSignedAt(prev => prev ?? new Date().toISOString());
+              }}
             />
+            {/* Overlay blocks the pad when name is empty */}
+            {!customerName.trim() && (
+              <div className="absolute inset-0 flex items-center justify-center bg-muted/60 backdrop-blur-[2px] cursor-not-allowed select-none">
+                <p className="text-xs font-medium text-muted-foreground text-center px-4">
+                  Enter customer name above to unlock signature
+                </p>
+              </div>
+            )}
           </div>
           <p className="text-[10px] text-muted-foreground px-4 sm:px-5 pb-4 mt-2">
             By signing, the customer acknowledges the recorded vehicle condition.

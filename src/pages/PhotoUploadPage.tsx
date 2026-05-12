@@ -9,6 +9,23 @@ import Navbar from '@/components/layout/Navbar';
 import { ArrowLeft, Loader2, Camera, Upload, X, CheckCircle2, AlertCircle } from 'lucide-react';
 import { toast } from 'sonner';
 
+// ── Image compression ─────────────────────────────────────────────────────────
+// Resizes to max 800px wide, quality 0.65 → ~50-80 KB each.
+// 4 photos at that size = ~250 KB, well under Firestore's 1 MB document limit.
+const compressImage = (src: string, maxWidth = 800, quality = 0.65): Promise<string> =>
+  new Promise((resolve) => {
+    const img = new Image();
+    img.onload = () => {
+      const scale = img.width > maxWidth ? maxWidth / img.width : 1;
+      const canvas = document.createElement('canvas');
+      canvas.width = Math.round(img.width * scale);
+      canvas.height = Math.round(img.height * scale);
+      canvas.getContext('2d')!.drawImage(img, 0, 0, canvas.width, canvas.height);
+      resolve(canvas.toDataURL('image/jpeg', quality));
+    };
+    img.src = src;
+  });
+
 // ── Per-angle upload row ───────────────────────────────────────────────────────
 
 interface AngleRowProps {
@@ -30,7 +47,11 @@ const AngleRow: React.FC<AngleRowProps> = ({ label, image, onUpload, onRemove })
     if (file.size > 20 * 1024 * 1024) { toast.error('File must be under 20 MB'); return; }
     if (!file.type.startsWith('image/')) { toast.error('Please select an image file'); return; }
     const reader = new FileReader();
-    reader.onload = ev => { onUpload(ev.target!.result as string); toast.success(`${label} photo uploaded`); };
+    reader.onload = async ev => {
+      const compressed = await compressImage(ev.target!.result as string);
+      onUpload(compressed);
+      toast.success(`${label} photo uploaded`);
+    };
     reader.readAsDataURL(file);
     e.target.value = '';
   };
@@ -48,9 +69,11 @@ const AngleRow: React.FC<AngleRowProps> = ({ label, image, onUpload, onRemove })
     canvasRef.current.width = videoRef.current.videoWidth;
     canvasRef.current.height = videoRef.current.videoHeight;
     ctx.drawImage(videoRef.current, 0, 0);
-    onUpload(canvasRef.current.toDataURL('image/jpeg', 0.92));
+    compressImage(canvasRef.current.toDataURL('image/jpeg', 1)).then(compressed => {
+      onUpload(compressed);
+      toast.success(`${label} photo captured`);
+    });
     stopCamera();
-    toast.success(`${label} photo captured`);
   };
 
   const stopCamera = () => {
@@ -185,12 +208,12 @@ const VehiclePhotoUploader: React.FC<UploaderProps> = ({ onPhotosReady, onCancel
         </button>
         <button
           onClick={() => onPhotosReady(photos)}
-          disabled={count === 0 || isSaving}
+          disabled={count !== ANGLES.length || isSaving}
           className="flex-1 flex items-center justify-center gap-2 px-4 py-2.5 rounded-xl bg-primary text-primary-foreground text-sm font-semibold hover:opacity-90 transition-opacity disabled:opacity-40 disabled:cursor-not-allowed"
         >
           {isSaving ? (
             <><Loader2 className="w-4 h-4 animate-spin" /> Saving…</>
-          ) : count === ANGLES.length ? 'Start Inspection →' : count > 0 ? `Continue with ${count} photo${count !== 1 ? 's' : ''} →` : 'Add photos to continue'}
+          ) : count === ANGLES.length ? 'Start Inspection →' : `${count}/${ANGLES.length} photos required`}
         </button>
       </div>
     </div>
@@ -223,12 +246,13 @@ const PhotoUploadPage = () => {
       // Invalidate all photo caches so dashboards and detail views refresh immediately
       queryClient.invalidateQueries({ queryKey: ['all_job_photos'] });
       queryClient.invalidateQueries({ queryKey: ['job_photos', id] });
+      setIsSaving(false);
+      navigate(`/mechanic/inspect/${id}`, { state: { viewPhotos: photos } });
     } catch {
-      // Non-fatal — photos still passed via navigation state for this session
-      toast.warning('Could not sync photos to server — they will be available for this session only.');
+      setIsSaving(false);
+      toast.error('Failed to save photos — please check your connection and try again.');
+      // Stay on this page so the mechanic can retry.
     }
-    setIsSaving(false);
-    navigate(`/mechanic/inspect/${id}`, { state: { viewPhotos: photos } });
   };
 
   const handleCancel = () => navigate('/mechanic');

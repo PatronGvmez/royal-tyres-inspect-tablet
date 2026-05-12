@@ -61,7 +61,8 @@ const CarDiagram: React.FC<CarDiagramProps> = ({ damages, onAreaClick, onRemoveD
   };
 
   const handleTouch = (e: React.TouchEvent<HTMLDivElement>) => {
-    e.preventDefault();
+    // No preventDefault needed — the container has touch-action:none (touch-none class)
+    // which prevents scroll/zoom natively without requiring a non-passive preventDefault.
     const touch = e.touches[0];
     const rect = e.currentTarget.getBoundingClientRect();
     const x = ((touch.clientX - rect.left) / rect.width) * 100;
@@ -119,16 +120,26 @@ const CarDiagram: React.FC<CarDiagramProps> = ({ damages, onAreaClick, onRemoveD
         }}
         onPointerUp={handleContainerPointerUp}
         onPointerLeave={handleContainerPointerUp}
-        style={{ height: 260 }}
+        style={{ height: 600 }}
       >
         {/* Photo OR SVG — mutually exclusive. Photo hides the default model entirely. */}
         {photos?.[activeView] ? (
-          <div className="absolute inset-0 z-0 flex items-center justify-center bg-muted p-5">
+          <div className="absolute inset-0 z-0 overflow-hidden">
+            {/* Blurred backdrop fills grey bars for any aspect ratio */}
+            <img
+              src={photos[activeView]}
+              alt=""
+              aria-hidden
+              className="absolute inset-0 w-full h-full object-cover scale-110 blur-xl brightness-75 pointer-events-none"
+            />
+            {/* Actual photo — cover fills the frame; backdrop handles portrait edge cases */}
             <img
               src={photos[activeView]}
               alt={`${activeView} view`}
-              className="w-full h-full object-contain"
+              className="relative z-10 w-full h-full object-cover"
             />
+            {/* subtle vignette keeps tyre/damage overlays readable over bright photos */}
+            <div className="absolute inset-0 z-20 bg-gradient-to-t from-black/30 via-transparent to-transparent pointer-events-none" />
           </div>
         ) : (
           /* Vehicle diagram — centred inside the fixed-height box */

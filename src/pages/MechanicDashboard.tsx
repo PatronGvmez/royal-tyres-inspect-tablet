@@ -209,8 +209,10 @@ const MechanicDashboard = () => {
   });
   const [platePhoto, setPlatePhoto] = useState<string | null>(null);
   const [diskPhoto, setDiskPhoto] = useState<string | null>(null);
+  const [odometerPhoto, setOdometerPhoto] = useState<string | null>(null);
   const plateInputRef = useRef<HTMLInputElement>(null);
   const diskInputRef = useRef<HTMLInputElement>(null);
+  const odometerInputRef = useRef<HTMLInputElement>(null);
 
   const { data: allJobs = [], isLoading, isError } = useQuery({
     queryKey: ['jobs'],
@@ -254,10 +256,11 @@ const MechanicDashboard = () => {
   });
 
   const addJobMutation = useMutation({
-    mutationFn: (data: typeof form) => {
+    mutationFn: async (data: typeof form) => {
       const serviceDetails = data.service_type === 'Other'
         ? data.service_details.trim()
         : data.service_type;
+      
       return createJobCard({
         vehicle_id: `V-${Date.now()}`,
         customer_name: data.customer_name.trim(),
@@ -269,6 +272,7 @@ const MechanicDashboard = () => {
         mechanic_id: user?.id,
         license_plate_photo: platePhoto ?? undefined,
         disk_photo: diskPhoto ?? undefined,
+        odometer_photo: odometerPhoto ?? undefined,
         odometer: data.odometer ? Number(data.odometer) : undefined,
       });
     },
@@ -279,10 +283,15 @@ const MechanicDashboard = () => {
       setForm({ customer_name: '', license_plate: '', service_details: '', service_type: '', odometer: '', vehicle_type: 'sedan', model: VEHICLE_TYPE_TO_BODY['sedan'] });
       setPlatePhoto(null);
       setDiskPhoto(null);
+      setOdometerPhoto(null);
       setPreviewIdx(0);
       navigate(`/mechanic/photo-upload/${newJob.id}`);
     },
-    onError: () => toast.error('Failed to create job card — please try again.'),
+    onError: (error) => {
+      console.error('Job card creation failed:', error);
+      const errorMessage = error instanceof Error ? error.message : 'Failed to create job card';
+      toast.error(errorMessage === 'Failed to create job card' ? errorMessage + ' — please try again.' : errorMessage);
+    },
   });
 
   const acknowledgeJobMutation = useMutation({
@@ -319,6 +328,12 @@ const MechanicDashboard = () => {
         status: 'booked',
         image_url: job.image_url,
         vehicle_type: job.vehicle_type,
+        make: job.make,
+        model: job.model,
+        year: job.year,
+        odometer: job.odometer,
+        license_plate_photo: job.license_plate_photo,
+        disk_photo: job.disk_photo,
         mechanic_id: user?.id,
       }),
     onSuccess: () => {
@@ -406,7 +421,7 @@ const MechanicDashboard = () => {
         onStartTour={tour.startTour}
       />
 
-      <div className="max-w-6xl mx-auto px-4 sm:px-6 lg:px-8">
+      <div className="max-w-[1600px] mx-auto px-4 sm:px-6 lg:px-8">
 
         {isLoading && (
           <div className="flex items-center justify-center py-40">
@@ -415,7 +430,7 @@ const MechanicDashboard = () => {
         )}
 
         {!isLoading && (
-          <div className="mt-6 lg:grid lg:grid-cols-[280px_1fr] lg:gap-8 xl:grid-cols-[300px_1fr]">
+          <div className="mt-6 lg:grid lg:grid-cols-[280px_1fr] lg:gap-8 xl:grid-cols-[320px_1fr] 2xl:grid-cols-[360px_1fr]">
 
             {/* ── SIDEBAR ── */}
             <aside className="lg:sticky lg:top-20 lg:self-start space-y-3 mb-6 lg:mb-0">
@@ -631,7 +646,7 @@ const MechanicDashboard = () => {
                   </div>
 
                   <motion.div
-                    className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-2 gap-4 items-start"
+                    className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-2 2xl:grid-cols-3 gap-4 items-start"
                     initial="hidden"
                     animate="visible"
                     variants={{ hidden: {}, visible: { transition: { staggerChildren: 0.07 } } }}
@@ -645,13 +660,15 @@ const MechanicDashboard = () => {
                         className="card-elevated overflow-hidden group hover:shadow-lg transition-all"
                       >
                         {/* Image area */}
-                        <div className="relative h-32 overflow-hidden" style={{ background: 'var(--vehicle-card-bg)' }}>
+                        <div className="relative h-40 overflow-hidden" style={{ background: 'var(--vehicle-card-bg)' }}>
                           <div className="absolute inset-0 pointer-events-none" style={{ background: 'var(--vehicle-card-glow)' }} />
                           <VehicleCardCarousel
                             vehicleType={job.vehicle_type}
                             photos={allPhotos[job.id]}
                             licensePlate={job.license_plate}
                           />
+                          {/* Gradient so badges are legible over photos */}
+                          <div className="absolute inset-0 pointer-events-none" style={{ background: 'linear-gradient(to bottom, rgba(0,0,0,0.28) 0%, transparent 45%, transparent 70%, rgba(0,0,0,0.18) 100%)' }} />
                           {/* Open badge top-left */}
                           <div className="absolute top-2 left-2">
                             <span className="flex items-center gap-1 bg-success/90 text-white text-[9px] font-bold px-1.5 py-0.5 rounded-full backdrop-blur-sm">
@@ -720,7 +737,7 @@ const MechanicDashboard = () => {
                   </p>
 
                   <motion.div
-                    className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-2 gap-4 items-start"
+                    className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-2 2xl:grid-cols-3 gap-4 items-start"
                     initial="hidden"
                     animate="visible"
                     variants={{ hidden: {}, visible: { transition: { staggerChildren: 0.07 } } }}
@@ -736,13 +753,15 @@ const MechanicDashboard = () => {
                           className="card-elevated overflow-hidden group hover:shadow-lg transition-all"
                         >
                           {/* Image area */}
-                          <div className="relative h-32 overflow-hidden" style={{ background: 'var(--vehicle-card-bg)' }}>
+                          <div className="relative h-40 overflow-hidden" style={{ background: 'var(--vehicle-card-bg)' }}>
                             <div className="absolute inset-0 pointer-events-none" style={{ background: 'var(--vehicle-card-glow)' }} />
                             <VehicleCardCarousel
                               vehicleType={job.vehicle_type}
                               photos={allPhotos[job.id]}
                               licensePlate={job.license_plate}
                             />
+                            {/* Gradient so badges are legible over photos */}
+                            <div className="absolute inset-0 pointer-events-none" style={{ background: 'linear-gradient(to bottom, rgba(0,0,0,0.28) 0%, transparent 45%, transparent 70%, rgba(0,0,0,0.18) 100%)' }} />
                             <div className="absolute top-2 left-2">
                               <span className="flex items-center gap-1 bg-warning text-white text-[9px] font-bold px-1.5 py-0.5 rounded-full">
                                 <AlertCircle className="w-2.5 h-2.5" /> Needs Cover
@@ -813,7 +832,7 @@ const MechanicDashboard = () => {
                   </div>
 
                   <motion.div
-                    className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-2 gap-4 items-start"
+                    className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-2 2xl:grid-cols-3 gap-4 items-start"
                     initial="hidden"
                     animate="visible"
                     variants={{ hidden: {}, visible: { transition: { staggerChildren: 0.08 } } }}
@@ -824,7 +843,7 @@ const MechanicDashboard = () => {
                       const workflowSteps = getWorkflowSteps(job, hasPhotos);
                       const jobNudge = nudges.find(n => n.job_id === job.id) ?? null;
                       return (
-                      <motion.button
+                      <motion.div
                         variants={{ hidden: { opacity: 0, y: 20 }, visible: { opacity: 1, y: 0 } }}
                         transition={{ duration: 0.35 }}
                         key={job.id}
@@ -835,16 +854,18 @@ const MechanicDashboard = () => {
                             navigate(`/mechanic/inspect/${job.id}`);
                           }
                         }}
-                        className={`card-elevated w-full text-left overflow-hidden group hover:shadow-lg transition-all ${jobNudge ? 'ring-2 ring-warning/60 ring-offset-2 ring-offset-background' : ''}`}
+                        className={`card-elevated w-full text-left overflow-hidden group hover:shadow-lg transition-all cursor-pointer ${jobNudge ? 'ring-2 ring-warning/60 ring-offset-2 ring-offset-background' : ''}`}
                       >
                         {/* Image area — auto-rotating carousel */}
-                        <div className="relative h-32 overflow-hidden" style={{ background: 'var(--vehicle-card-bg)' }}>
+                        <div className="relative h-40 overflow-hidden" style={{ background: 'var(--vehicle-card-bg)' }}>
                           <div className="absolute inset-0 pointer-events-none" style={{ background: 'var(--vehicle-card-glow)' }} />
                           <VehicleCardCarousel
                             vehicleType={job.vehicle_type}
                             photos={allPhotos[job.id]}
                             licensePlate={job.license_plate}
                           />
+                          {/* Gradient so badges are legible over photos */}
+                          <div className="absolute inset-0 pointer-events-none" style={{ background: 'linear-gradient(to bottom, rgba(0,0,0,0.28) 0%, transparent 45%, transparent 70%, rgba(0,0,0,0.18) 100%)' }} />
                           {/* status badge top-left */}
                           <div className="absolute top-2 left-2">
                             <span className={`status-badge ${statusClass[job.status]}`}>{statusLabel[job.status]}</span>
@@ -936,7 +957,7 @@ const MechanicDashboard = () => {
 
                         {/* Coloured bottom border by status */}
                         <div className="h-0.5 w-full" style={{ background: jobNudge || (!hasPhotos && job.status === 'booked') ? 'hsl(var(--warning))' : statusAccent[job.status] }} />
-                      </motion.button>
+                      </motion.div>
                       );
                     })}
                   </motion.div>
@@ -986,13 +1007,13 @@ const MechanicDashboard = () => {
                       </div>
 
                   <motion.div
-                    className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-3 gap-3"
+                    className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-3 2xl:grid-cols-4 gap-3"
                     initial="hidden"
                     animate="visible"
                     variants={{ hidden: {}, visible: { transition: { staggerChildren: 0.06 } } }}
                   >
                     {group.map((job) => (
-                      <motion.button
+                      <motion.div
                         variants={{ hidden: { opacity: 0, y: 16 }, visible: { opacity: 1, y: 0 } }}
                         transition={{ duration: 0.3 }}
                         key={job.id}
@@ -1000,13 +1021,15 @@ const MechanicDashboard = () => {
                         className="card-elevated overflow-hidden group text-left hover:shadow-md transition-all cursor-pointer"
                       >
                         {/* Image — auto-rotating carousel */}
-                        <div className="h-28 overflow-hidden relative" style={{ background: 'var(--vehicle-card-bg)' }}>
+                        <div className="h-40 overflow-hidden relative" style={{ background: 'var(--vehicle-card-bg)' }}>
                           <div className="absolute inset-0 pointer-events-none" style={{ background: 'var(--vehicle-card-glow)' }} />
                           <VehicleCardCarousel
                             vehicleType={job.vehicle_type}
                             photos={allPhotos[job.id]}
                             licensePlate={job.license_plate}
                           />
+                          {/* Gradient so badges are legible over photos */}
+                          <div className="absolute inset-0 pointer-events-none" style={{ background: 'linear-gradient(to bottom, rgba(0,0,0,0.28) 0%, transparent 45%, transparent 70%, rgba(0,0,0,0.18) 100%)' }} />
                           {/* job id top-left */}
                           <div className="absolute top-2 left-2">
                             <span className="text-[9px] font-mono bg-black/40 text-white px-1.5 py-0.5 rounded-full backdrop-blur-sm">{job.id}</span>
@@ -1033,7 +1056,7 @@ const MechanicDashboard = () => {
                             <ChevronRight className="w-3 h-3 ml-auto group-hover:translate-x-0.5 transition-transform" />
                           </div>
                         </div>
-                      </motion.button>
+                      </motion.div>
                     ))}
                   </motion.div>
                     </div>
@@ -1530,14 +1553,67 @@ const MechanicDashboard = () => {
                     <Gauge className="w-3 h-3 text-muted-foreground" />
                     Odometer (km) <span className="text-[10px] font-normal text-muted-foreground ml-1">(optional)</span>
                   </label>
-                  <input
-                    type="number"
-                    min={0}
-                    value={form.odometer}
-                    onChange={e => setForm(f => ({ ...f, odometer: e.target.value }))}
-                    placeholder="e.g. 45000"
-                    className={inputCls}
-                  />
+                  <div className="flex items-center gap-2">
+                    <input
+                      type="number"
+                      min={0}
+                      value={form.odometer}
+                      onChange={e => setForm(f => ({ ...f, odometer: e.target.value }))}
+                      placeholder="e.g. 45000"
+                      className={`${inputCls} flex-1`}
+                    />
+                    <button
+                      type="button"
+                      title="Capture odometer photo"
+                      onClick={() => odometerInputRef.current?.click()}
+                      className={`flex-shrink-0 flex items-center justify-center w-10 h-10 rounded-lg border transition-all ${
+                        odometerPhoto
+                          ? 'bg-primary border-primary text-primary-foreground'
+                          : 'border-input bg-background text-muted-foreground hover:bg-muted hover:text-foreground'
+                      }`}
+                    >
+                      <Camera className="w-4 h-4" />
+                    </button>
+                    <input
+                      ref={odometerInputRef}
+                      type="file"
+                      accept="image/*"
+                      capture="environment"
+                      className="hidden"
+                      onChange={async (e) => {
+                        const file = e.target.files?.[0];
+                        if (!file) return;
+                        const reader = new FileReader();
+                        reader.onload = async (ev) => {
+                          const raw = ev.target?.result as string;
+                          setOdometerPhoto(await compressImage(raw));
+                        };
+                        reader.readAsDataURL(file);
+                        e.target.value = '';
+                      }}
+                    />
+                  </div>
+                  {odometerPhoto && (
+                    <div className="mt-2 flex items-center gap-3">
+                      <div className="relative w-24 h-14 rounded-lg overflow-hidden border border-primary/40 group">
+                        <img src={odometerPhoto} alt="Odometer" className="w-full h-full object-cover" />
+                        <button
+                          type="button"
+                          onClick={() => setOdometerPhoto(null)}
+                          className="absolute top-0.5 right-0.5 p-0.5 rounded-full bg-black/60 text-white opacity-0 group-hover:opacity-100 transition-opacity"
+                        >
+                          <X className="w-3 h-3" />
+                        </button>
+                      </div>
+                      <button
+                        type="button"
+                        onClick={() => odometerInputRef.current?.click()}
+                        className="text-xs text-primary hover:underline"
+                      >
+                        Retake
+                      </button>
+                    </div>
+                  )}
                 </div>
 
                 {/* Preview plate */}
